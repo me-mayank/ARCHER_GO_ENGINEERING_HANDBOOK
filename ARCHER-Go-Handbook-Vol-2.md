@@ -2,13 +2,13 @@
 
 ## Volume 2
 
-### Concurrency, Workers, and Realtime Backend Systems
+### Concurrency, Worker Systems, and Go Runtime Thinking
 
 #### Mayank Tripathi
 
 ---
 
-> *Volume 2 of 4 — The ARCHER Go Engineering Handbook Series*
+> *Volume 2 of 5 — The ARCHER Go Engineering Handbook Series*
 >
 > *A production-grade distributed systems engineering curriculum for backend engineers building infrastructure in Go.*
 
@@ -16,41 +16,572 @@
 
 ## Preface — Volume 2
 
-Volume 1 established the mental models. Volume 2 builds the systems.
+If Volume 1 is the philosophy, Volume 2 is the machinery.
 
-Concurrent communication, worker orchestration, and real-time data delivery are not advanced topics in distributed systems engineering — they are table stakes. A load generator that cannot sustain 50k concurrent requests per second, a WebSocket hub that drops connections under load, or an API server that blocks indefinitely on a slow client are not production systems. They are prototypes that happen to work in demos.
+The Go scheduler, goroutine lifecycle, the GMP model, stack growth, `GOMAXPROCS` — these are not implementation details to be learned once and forgotten. They are the operational reality of every concurrent backend you will build. A load generator running 5000 goroutines on a 2-CPU Kubernetes pod behaves completely differently depending on whether `GOMAXPROCS` is 2 or 32. A consumer loop that ignores goroutine backpressure becomes a memory leak. A goroutine that doesn't check `ctx.Done()` becomes a zombie after shutdown. Understanding the runtime is what separates engineers who build systems that stay up from those who build systems that work in demos.
 
-This volume is about the gap between prototype and production. It covers the full channel taxonomy — pipelines, fan-out, fan-in, hubs, semaphores — and explains when each pattern is correct and when it becomes a bottleneck. It builds the bounded-concurrency worker pool that drives the ARCHER load generator, including rate limiting, telemetry instrumentation, and graceful drain. It then applies the context package — Go's unified cancellation, deadline, and request-scoping mechanism — to tie worker lifecycle to service lifecycle. Finally, it constructs a production-grade REST API server with a middleware chain, health probes, and Prometheus instrumentation, and completes the real-time path with the WebSocket Hub pattern.
+This volume covers the Go scheduler at depth — the GMP model, work stealing, goroutine state machine, and the `automaxprocs` library that automatically aligns `GOMAXPROCS` with container CPU quotas. It then covers channels — the complete taxonomy of patterns that make concurrent Go readable and correct: pipelines, fan-out, fan-in, hubs, semaphores, and the `select` statement as a concurrent switch. The worker pool chapter assembles these primitives into the bounded-concurrency engine at the heart of the ARCHER load generator. Finally, the context chapter ties everything together: Go's unified mechanism for propagating cancellation, deadlines, and request-scoped data across every goroutine, every network call, and every service boundary.
 
-By the end of Volume 2, you will be able to design and build the complete frontend communication surface of a distributed backend platform: concurrent job execution, context-governed cancellation, REST API with proper timeout and drain semantics, and WebSocket real-time push.
+By the end of Volume 2, you will be able to reason about goroutine lifecycle, channel topology, context propagation, and shutdown correctness for any concurrent Go system.
 
 **Chapters in this volume:**
 
-| Chapter | Title | Systems Concept |
-|---------|-------|-----------------|
+| Chapter | Title | Core Concept |
+|---------|-------|--------------|
+| 05 | Goroutines and the Go Scheduler | GMP model, stack growth, lifecycle, `automaxprocs` |
 | 06 | Channels and Communication Patterns | Pipeline, fan-out/in, hub, semaphore, `select`, backpressure |
 | 07 | Worker Pools and Concurrent Job Systems | Bounded concurrency, rate limiting, telemetry, graceful drain |
 | 08 | Context Package and Graceful Cancellation | Context tree, signal handling, propagation, shutdown contract |
-| 09 | Building REST APIs in Go | ServeMux, middleware chain, handlers, health probes, Prometheus |
-| 10 | WebSocket Systems in Go | Hub pattern, read/write pumps, ping/pong, run-scoped broadcast |
 
-**Companion volumes in this series:**
-- *Volume 1* — Foundations of Go Systems Engineering (Chapters 1–5)
-- *Volume 3* — Distributed Communication, Telemetry, and Infrastructure Systems (Chapters 11–15)
-- *Volume 4* — High-Performance Distributed Architecture and Production Engineering (Chapters 16–20)
+**Companion volumes:**
+- *Volume 1* — Foundations of Go Systems Engineering (Chapters 1–4)
+- *Volume 3* — APIs, WebSockets, Kafka, and Distributed Communication (Chapters 9–12)
+- *Volume 4* — Telemetry, Infrastructure Systems, and Production Backend Engineering (Chapters 13–16)
+- *Volume 5* — High-Performance Distributed Architecture and ARCHER Systems Design (Chapters 17–20)
 
 ---
 
 ## Table of Contents — Volume 2
 
+5. [Goroutines and the Go Scheduler](#chapter-05--goroutines-and-the-go-scheduler)
 6. [Channels and Communication Patterns](#chapter-06--channels-and-communication-patterns)
 7. [Worker Pools and Concurrent Job Systems](#chapter-07--worker-pools-and-concurrent-job-systems)
 8. [Context Package and Graceful Cancellation](#chapter-08--context-package-and-graceful-cancellation)
-9. [Building REST APIs in Go](#chapter-09--building-rest-apis-in-go)
-10. [WebSocket Systems in Go](#chapter-10--websocket-systems-in-go)
 
 ---
 
+
+---
+
+# Chapter 05 — Goroutines and the Go Scheduler
+
+> **Engineering Learning Booklet | ARCHER Backend Architecture Series**
+> *The runtime machinery behind Go's concurrency model — and how to use it without shooting yourself in the foot.*
+
+---
+
+## 1. What a Goroutine Actually Is
+
+A goroutine is a function executing concurrently with other goroutines in the same address space. It is **not** a thread. It is a lightweight, cooperatively-and-preemptively scheduled execution unit managed by the Go runtime.
+
+```go
+go func() {
+    // This runs concurrently — scheduling is the runtime's problem
+    sendRequest(ctx, target)
+}()
+```
+
+The `go` keyword is the only primitive you need to launch a goroutine. The rest — stack management, scheduling, I/O multiplexing — is handled by the runtime.
+
+### 1.1 Stack Growth
+
+A goroutine starts with a **2 KB stack** that grows and shrinks dynamically as needed. The runtime detects when a goroutine is about to exceed its current stack allocation (via a stack guard check on every function call) and copies the stack to a larger allocation — typically doubling.
+
+This means you can have hundreds of thousands of goroutines, each with a different stack depth, without pre-allocating thread stacks of 1–8 MB. For a WebSocket service handling 100k concurrent connections, this is the difference between 200 MB and 100 GB of memory.
+
+**Implication for recursive algorithms:** Deep recursion in a goroutine is safe but causes repeated stack growth. In a load generator's hot path, prefer iteration to recursion to avoid stack copying overhead.
+
+### 1.2 The Goroutine ID
+
+Goroutines have no exported ID visible to application code. This is intentional — it prevents goroutine-local storage anti-patterns (thread-local storage was Go's explicit "never again"). Use `context.Context` to propagate request-scoped state. This was established in Chapter 1 and becomes critical in Chapters 5 and 8.
+
+---
+
+## 2. The Go Scheduler — GMP Model
+
+The Go scheduler uses the **GMP model**:
+
+```
+G — Goroutine (the unit of concurrent execution)
+M — Machine (OS thread)
+P — Processor (logical CPU, holds run queue)
+```
+
+```
+┌──────────────────────────────────────────────────┐
+│                   Go Runtime                     │
+│                                                  │
+│  P0 [run queue: G1, G2, G3] ←→ M0 (OS thread)  │
+│  P1 [run queue: G4, G5]     ←→ M1 (OS thread)  │
+│  P2 [run queue: G6]         ←→ M2 (OS thread)  │
+│  P3 [run queue: empty]      ←→ M3 (OS thread)  │
+│                                                  │
+│  Global run queue: [G7, G8, G9]                 │
+└──────────────────────────────────────────────────┘
+```
+
+- **`GOMAXPROCS`** sets the number of Ps (default: number of CPU cores)
+- Each P has a local run queue of goroutines (up to 256)
+- When a P's local queue is empty, it **work-steals** from another P
+- An M executes one G at a time on one P
+
+### 2.1 Preemption
+
+Before Go 1.14, goroutines were only preempted at function call sites (cooperative preemption). A tight CPU loop could starve other goroutines:
+
+```go
+// Pre-1.14: could starve other goroutines on the same P
+func busySpin() {
+    for {
+        // No function calls → no preemption point
+    }
+}
+```
+
+From **Go 1.14+**, the runtime uses **asynchronous preemption** via signals (SIGURG). A goroutine running a tight loop can be preempted mid-instruction. Production Go code from 1.14+ is safe from this starvation bug.
+
+### 2.2 Blocking and OS Thread Handoff
+
+When a goroutine blocks on a **syscall** (file I/O, certain cgo calls), the Go runtime **detaches the M from the P** and lets the P run other goroutines:
+
+```
+Goroutine calls syscall:
+1. M detaches from P (P is now free)
+2. P is picked up by another M (possibly a new one)
+3. P continues running other goroutines
+4. When syscall completes: M tries to reacquire a P
+   - If a P is available: resume goroutine on that P
+   - If no P available: goroutine goes to global run queue; M goes to sleep
+```
+
+For **network I/O** (TCP reads, HTTP requests), Go uses the **netpoller** — a non-blocking I/O multiplexer built on `epoll` (Linux) or `kqueue` (macOS). Network-blocked goroutines park without occupying an OS thread at all.
+
+This is why a Go HTTP server can handle 100k concurrent connections without 100k threads — 99k goroutines are parked in the netpoller, and only a handful of OS threads serve the P's run queues.
+
+---
+
+## 3. `GOMAXPROCS` in Production
+
+`GOMAXPROCS` must match the **container's CPU limit**, not the host machine's CPUs. A container limited to 2 CPUs running on a 64-core host will create 64 Ps, but only 2 will ever run — the other 62 burn CPU trying to run goroutines that get throttled by the kernel.
+
+```go
+// Use the automaxprocs library — reads CPU quota from cgroups
+import _ "go.uber.org/automaxprocs"
+
+// Placed in main() — automatically sets GOMAXPROCS to container CPU limit
+```
+
+```dockerfile
+# Kubernetes resource limits example
+resources:
+  limits:
+    cpu: "2"
+  requests:
+    cpu: "1"
+```
+
+Without `automaxprocs`, a Go service in Kubernetes with a 2-CPU limit but running on a 32-core node will set `GOMAXPROCS=32`, creating 32 OS threads competing for 2 CPUs — a scheduling performance regression.
+
+---
+
+## 4. Goroutine Lifecycle Management
+
+The most common production mistake: **goroutine leaks**. A goroutine that is started but never exits accumulates memory and CPU, and is invisible unless you instrument it.
+
+### 4.1 The Goroutine Leak Pattern
+
+```go
+// LEAK: this goroutine runs forever, no exit condition
+func startWorker(jobs <-chan Job) {
+    go func() {
+        for job := range jobs {
+            process(job)
+        }
+        // Only exits if jobs channel is closed — what if it never is?
+    }()
+}
+
+// LEAK: blocks forever waiting for a channel that nobody writes to
+func subscribe(events <-chan Event) {
+    go func() {
+        for e := range events { // blocks if producer dies without closing
+            handle(e)
+        }
+    }()
+}
+```
+
+### 4.2 The Correct Pattern — Context-Driven Lifecycle
+
+```go
+func startWorker(ctx context.Context, jobs <-chan Job) {
+    go func() {
+        for {
+            select {
+            case <-ctx.Done():
+                return // clean exit when context cancelled
+            case job, ok := <-jobs:
+                if !ok {
+                    return // channel closed — exit
+                }
+                process(ctx, job)
+            }
+        }
+    }()
+}
+```
+
+Every goroutine must have a documented, reachable exit condition:
+1. Channel closed
+2. Context cancelled
+3. Return from function (for goroutines in a `for` loop that terminates)
+
+### 4.3 Tracking Goroutines in Production
+
+```go
+// Expose goroutine count as a metric
+func goroutineMetricLoop(ctx context.Context, gauge prometheus.Gauge) {
+    ticker := time.NewTicker(10 * time.Second)
+    defer ticker.Stop()
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-ticker.C:
+            gauge.Set(float64(runtime.NumGoroutine()))
+        }
+    }
+}
+```
+
+A rising `runtime.NumGoroutine()` over time (visible in Grafana) is the canonical signal of a goroutine leak. Alert on it.
+
+---
+
+## 5. `sync.WaitGroup` — Lifecycle Coordination
+
+`WaitGroup` is the primitive for "start N goroutines, wait for all to finish":
+
+```go
+func runLoadBatch(ctx context.Context, jobs []Job, concurrency int) []Result {
+    results := make([]Result, 0, len(jobs))
+    resultCh := make(chan Result, len(jobs))
+
+    sem := make(chan struct{}, concurrency)
+    var wg sync.WaitGroup
+
+    for _, job := range jobs {
+        job := job
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            sem <- struct{}{}         // acquire slot
+            defer func() { <-sem }() // release slot
+            resultCh <- job.Execute(ctx)
+        }()
+    }
+
+    // Close resultCh once all goroutines finish
+    go func() {
+        wg.Wait()
+        close(resultCh)
+    }()
+
+    for r := range resultCh {
+        results = append(results, r)
+    }
+    return results
+}
+```
+
+**`wg.Add(1)` before `go func()`** — never inside the goroutine. If the goroutine is scheduled late, `wg.Wait()` might return before `Add` is called, causing a race on the counter.
+
+---
+
+## 6. `sync.Once` — Initialization Safety
+
+For one-time initialization in a concurrent system (connecting to a database, loading a config):
+
+```go
+type SchemaInitializer struct {
+    db   *sql.DB
+    once sync.Once
+    err  error
+}
+
+func (s *SchemaInitializer) Init(ctx context.Context) error {
+    s.once.Do(func() {
+        s.err = s.runMigrations(ctx)
+    })
+    return s.err
+}
+```
+
+`sync.Once.Do` guarantees the function runs exactly once, even under concurrent callers. If the first call panics, the function is **not** retried — the `Once` is considered "done." For retryable initialization, use a mutex and a boolean flag instead.
+
+---
+
+## 7. Goroutine Patterns for ARCHER
+
+### 7.1 The Supervisor Pattern
+
+A supervisor goroutine restarts crashed child goroutines:
+
+```go
+func supervise(ctx context.Context, name string, fn func(context.Context) error, logger *zap.Logger) {
+    go func() {
+        for {
+            if err := fn(ctx); err != nil {
+                if ctx.Err() != nil {
+                    return // shutdown — don't restart
+                }
+                logger.Error("worker crashed, restarting",
+                    zap.String("worker", name),
+                    zap.Error(err),
+                )
+                select {
+                case <-time.After(2 * time.Second): // backoff before restart
+                case <-ctx.Done():
+                    return
+                }
+                continue
+            }
+            return // clean exit (fn returned nil) — don't restart
+        }
+    }()
+}
+
+// Usage in main:
+supervise(ctx, "kafka-consumer", consumer.Run, logger)
+supervise(ctx, "telemetry-pipeline", pipeline.Run, logger)
+supervise(ctx, "websocket-hub", hub.Run, logger)
+```
+
+This pattern keeps ARCHER services alive across transient failures without crashing the entire process.
+
+### 7.2 The Fan-Out Pattern (Load Generator Core)
+
+```go
+// Distribute N jobs across concurrency workers
+func fanOut(ctx context.Context, concurrency int, jobs []Job) <-chan Result {
+    results := make(chan Result, len(jobs))
+    jobCh := make(chan Job, len(jobs))
+
+    // Feed jobs
+    go func() {
+        defer close(jobCh)
+        for _, j := range jobs {
+            select {
+            case <-ctx.Done():
+                return
+            case jobCh <- j:
+            }
+        }
+    }()
+
+    // Workers
+    var wg sync.WaitGroup
+    for i := 0; i < concurrency; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for job := range jobCh {
+                results <- job.Execute(ctx)
+            }
+        }()
+    }
+
+    // Close results when all workers done
+    go func() {
+        wg.Wait()
+        close(results)
+    }()
+
+    return results
+}
+```
+
+### 7.3 The Background Ticker Pattern (Telemetry Flush)
+
+```go
+func (p *Pipeline) runFlushLoop(ctx context.Context) {
+    ticker := time.NewTicker(p.flushInterval)
+    defer ticker.Stop()
+
+    for {
+        select {
+        case <-ctx.Done():
+            // Final flush before shutdown
+            if err := p.flush(context.Background()); err != nil {
+                p.logger.Error("final flush failed", zap.Error(err))
+            }
+            return
+        case <-ticker.C:
+            if err := p.flush(ctx); err != nil {
+                p.logger.Error("periodic flush failed", zap.Error(err))
+                // Don't return — continue trying on next tick
+            }
+        }
+    }
+}
+```
+
+The `context.Background()` in the final flush is intentional — the parent `ctx` is already cancelled at shutdown. You still want the final flush to complete.
+
+---
+
+## 8. Goroutine Anti-Patterns
+
+### 8.1 Goroutines in `init()` or Package-Level `var`
+
+```go
+// NEVER DO THIS — goroutine with no shutdown mechanism, no context
+var _ = func() bool {
+    go backgroundWorker() // no way to stop this
+    return true
+}()
+```
+
+Package-level goroutines are leaked by design — there is no context to cancel them and no `WaitGroup` to track them. All goroutines must be started from `main()` or from a struct with an explicit lifecycle.
+
+### 8.2 Passing `sync.WaitGroup` by Value
+
+```go
+// BUG: wg is copied — Done() on the copy doesn't affect the original
+func badWorker(wg sync.WaitGroup) { // copy!
+    defer wg.Done()
+}
+
+// CORRECT: pass by pointer
+func goodWorker(wg *sync.WaitGroup) {
+    defer wg.Done()
+}
+```
+
+### 8.3 `time.Sleep` Without Context
+
+```go
+// BAD: cannot be cancelled during shutdown
+time.Sleep(5 * time.Second)
+
+// GOOD: cancellable sleep
+select {
+case <-time.After(5 * time.Second):
+    // continue
+case <-ctx.Done():
+    return ctx.Err()
+}
+```
+
+---
+
+## 9. Debugging Goroutine Issues
+
+### 9.1 `runtime/pprof` Goroutine Dump
+
+```go
+// Add a pprof endpoint to every ARCHER service
+import _ "net/http/pprof"
+
+// In a separate goroutine:
+go http.ListenAndServe(":6060", nil)
+```
+
+Then: `curl http://localhost:6060/debug/pprof/goroutine?debug=2`
+
+This dumps every goroutine's stack trace — invaluable for diagnosing leaks. In production, expose this on an internal port only.
+
+### 9.2 `go test -race`
+
+```bash
+go test -race ./...
+```
+
+The race detector instruments memory accesses at compile time. It detects concurrent reads and writes to shared state without synchronization. Run this in CI on every push. A data race in production is undefined behavior.
+
+---
+
+## Key Takeaways
+
+1. **Goroutines are ~2KB, not ~1MB.** Spawn per-request, per-connection, per-job.
+2. **GMP model:** G goroutines on M OS threads, scheduled by P processors.
+3. **`GOMAXPROCS` must match container CPU limits** — use `automaxprocs`.
+4. **Every goroutine needs a documented exit condition** — context, channel close, or function return.
+5. **`sync.WaitGroup`** for lifecycle; **supervisor pattern** for resilience; **`sync.Once`** for initialization.
+6. **Goroutine leaks are invisible without instrumentation** — track `runtime.NumGoroutine()`.
+7. **`time.Sleep` in a goroutine must use `select` with `ctx.Done()`** for cancellability.
+
+---
+
+## Common Production Pitfalls
+
+| Pitfall | Consequence | Correct Approach |
+|---|---|---|
+| Goroutine with no exit condition | Memory grows unbounded | Always have a `ctx.Done()` or channel close exit |
+| `GOMAXPROCS` not tuned for containers | CPU scheduling inefficiency | Use `automaxprocs` in every service |
+| `wg.Add(1)` inside the goroutine | Race on WaitGroup counter | Always `Add` before `go func()` |
+| `sync.WaitGroup` passed by value | `Done()` doesn't decrement original counter | Always pass by pointer |
+| Tight CPU loop without function calls (pre-1.14) | Goroutine starvation | Ensure Go 1.14+; add `runtime.Gosched()` if needed |
+| Package-level goroutine in `init()` | Unstoppable goroutine | All goroutines from `main()` with explicit lifecycle |
+| `time.Sleep` without `select` | Ignores shutdown signals | Use `select` with `time.After` and `ctx.Done()` |
+
+---
+
+## Production Checklist
+
+- [ ] `go.uber.org/automaxprocs` imported in every binary's `main.go`
+- [ ] All goroutines have documented exit conditions
+- [ ] `runtime.NumGoroutine()` exposed as a Prometheus gauge
+- [ ] Supervisor pattern for all long-running service goroutines
+- [ ] `wg.Add(1)` always called before `go func()`
+- [ ] `go test -race ./...` passes in CI
+- [ ] pprof endpoint on internal port for goroutine dump access
+- [ ] No `time.Sleep` in goroutines — replaced with `select`/`ctx.Done()`
+
+---
+
+## Mini Backend Exercise
+
+**Task:** Build a goroutine-safe rate limiter:
+1. A struct with an internal token bucket (refilled every 100ms via a background goroutine)
+2. `Acquire(ctx context.Context) error` — blocks until a token is available or ctx is cancelled
+3. `Stop()` — shuts down the background refill goroutine cleanly
+4. Verify with `go test -race` that there are no data races
+
+---
+
+## Concurrency Exercise
+
+**Task:** Implement the fan-out pattern from §7.2 with a twist:
+1. If any job returns an error, cancel the context for all remaining jobs
+2. Collect all results (including partial ones before cancellation)
+3. Return the first error encountered alongside all collected results
+4. Verify with race detector
+
+---
+
+## How This Maps to the ARCHER Architecture
+
+| ARCHER Component | Goroutine Pattern |
+|---|---|
+| Load Generator | Fan-out (§7.2) with concurrency-limited workers |
+| Telemetry Pipeline | Background ticker (§7.3) with final flush on shutdown |
+| Kafka Consumer | Supervisor pattern (§7.1) for restart-on-crash |
+| WebSocket Hub | One goroutine per client (reader + writer goroutines) |
+| Worker Orchestrator | WaitGroup + semaphore for bounded concurrency |
+| API Server | One goroutine per HTTP request (stdlib manages this) |
+
+---
+
+## What Actually Matters for the Hackathon
+
+- Use `automaxprocs` — 5 seconds of work, measurable performance impact in Docker
+- Add `runtime.NumGoroutine()` to your metrics — first line of defense for leak detection
+- The supervisor pattern keeps ARCHER running without manual restarts during demos
+- Every goroutine must exit on `ctx.Done()` — non-negotiable for clean `SIGTERM` handling
+
+---
+
+## What Can Be Ignored for Now
+
+- `GODEBUG=schedtrace=1000` scheduler tracing — for deep scheduler debugging only
+- Goroutine affinity / pinning — not exposed in Go; handled by the runtime
+- `runtime.LockOSThread()` — only for cgo interop and OS-thread-specific syscalls
+- Green thread vs coroutine academic distinctions — practically irrelevant for ARCHER
+
+---
+
+*Next chapter: Channels and Communication Patterns — the primitives that connect goroutines into a distributed system within a process.*
 
 
 ---
@@ -1950,1259 +2481,3 @@ Draw the tree. Identify which cancellation causes which dependent context to can
 ---
 
 *Next chapter: Building REST APIs in Go — applying context, interfaces, middleware, and error handling to construct production-grade HTTP API servers.*
-
-
----
-
-# Chapter 09 — Building REST APIs in Go
-
-> **Engineering Learning Booklet | ARCHER Backend Architecture Series**
-> *Constructing production-grade HTTP API servers using the standard library, middleware chains, and the patterns established in previous chapters.*
-
----
-
-## 1. The Standard Library First Principle
-
-Go's `net/http` package is production-ready without a framework. Major production systems — Docker, Kubernetes API server, Consul, Vault — use `net/http` directly or with minimal routing libraries. Understanding the standard library makes framework choices deliberate rather than habitual.
-
-```go
-mux := http.NewServeMux()
-mux.HandleFunc("GET /api/runs", listRunsHandler)
-mux.HandleFunc("POST /api/runs", createRunHandler)
-mux.HandleFunc("GET /api/runs/{id}", getRunHandler)
-mux.HandleFunc("DELETE /api/runs/{id}", deleteRunHandler)
-
-server := &http.Server{
-    Addr:         cfg.Addr,
-    Handler:      mux,
-    ReadTimeout:  5 * time.Second,
-    WriteTimeout: 10 * time.Second,
-    IdleTimeout:  120 * time.Second,
-}
-```
-
-Go 1.22 added method-based routing (`GET /path`, `POST /path`) and path parameters (`{id}`) directly to `ServeMux`. For ARCHER, this eliminates the need for `gorilla/mux` or `chi` in most cases.
-
----
-
-## 2. Server Configuration — Every Field Matters
-
-```go
-server := &http.Server{
-    Addr:    cfg.Server.Addr,
-    Handler: buildHandler(deps),
-
-    // Prevent Slowloris attack — limit time to read full request headers
-    ReadHeaderTimeout: 2 * time.Second,
-
-    // Total time to read the full request body
-    ReadTimeout: 5 * time.Second,
-
-    // Total time to write the full response (including body streaming)
-    WriteTimeout: 10 * time.Second,
-
-    // How long to keep idle connections alive (keep-alive)
-    IdleTimeout: 120 * time.Second,
-
-    // Limit request body size globally — prevents OOM from large payloads
-    // Individual handlers can override via http.MaxBytesReader
-    MaxHeaderBytes: 1 << 20, // 1 MB
-}
-```
-
-**Production defaults without these timeouts:** a single slow client can hold a goroutine indefinitely. With `ReadHeaderTimeout: 2s`, Slowloris attacks are mitigated. With `WriteTimeout: 10s`, a slow consumer cannot hold a response goroutine open indefinitely.
-
----
-
-## 3. The Handler Architecture
-
-### 3.1 Handlers as Closures Over Dependencies
-
-The standard `http.HandlerFunc` is a function. Dependencies are closed over — not reached via global state:
-
-```go
-// internal/api/handlers/runs.go
-package handlers
-
-type RunHandlers struct {
-    runStore  store.RunStore
-    metricStore store.MetricStore
-    pool      *loadgen.Pool
-    logger    *zap.Logger
-}
-
-func NewRunHandlers(rs store.RunStore, ms store.MetricStore, p *loadgen.Pool, l *zap.Logger) *RunHandlers {
-    return &RunHandlers{runStore: rs, metricStore: ms, pool: p, logger: l}
-}
-
-func (h *RunHandlers) CreateRun(w http.ResponseWriter, r *http.Request) {
-    var cfg loadgen.RunConfig
-    if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-        writeError(w, http.StatusBadRequest, "invalid request body")
-        return
-    }
-
-    if err := cfg.Validate(); err != nil {
-        writeError(w, http.StatusBadRequest, err.Error())
-        return
-    }
-
-    run, err := h.runStore.Create(r.Context(), cfg)
-    if err != nil {
-        h.logger.Error("create run", zap.Error(err))
-        writeError(w, http.StatusInternalServerError, "internal error")
-        return
-    }
-
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusCreated)
-    json.NewEncoder(w).Encode(run)
-}
-```
-
-### 3.2 Routing Assembly
-
-```go
-// internal/api/server.go
-package api
-
-func (s *Server) buildRoutes() http.Handler {
-    mux := http.NewServeMux()
-
-    runs := handlers.NewRunHandlers(s.runStore, s.metricStore, s.pool, s.logger)
-    metrics := handlers.NewMetricHandlers(s.metricStore, s.logger)
-
-    // Run lifecycle
-    mux.HandleFunc("POST /api/v1/runs",          runs.CreateRun)
-    mux.HandleFunc("GET /api/v1/runs",           runs.ListRuns)
-    mux.HandleFunc("GET /api/v1/runs/{id}",      runs.GetRun)
-    mux.HandleFunc("DELETE /api/v1/runs/{id}",   runs.StopRun)
-
-    // Metrics
-    mux.HandleFunc("GET /api/v1/runs/{id}/metrics",       metrics.GetMetrics)
-    mux.HandleFunc("GET /api/v1/runs/{id}/percentiles",   metrics.GetPercentiles)
-
-    // Operational
-    mux.HandleFunc("GET /healthz",     s.healthHandler)
-    mux.HandleFunc("GET /readyz",      s.readinessHandler)
-
-    // Apply middleware chain to the entire mux
-    return chain(mux,
-        middleware.RequestID(),
-        middleware.RequestLogger(s.logger),
-        middleware.Recover(s.logger),
-        middleware.CORS(s.cfg.AllowedOrigins),
-    )
-}
-```
-
----
-
-## 4. Middleware Chain Implementation
-
-The middleware pattern from Chapter 3 applied at scale:
-
-```go
-// internal/api/middleware/middleware.go
-package middleware
-
-type Middleware func(http.Handler) http.Handler
-
-func Chain(h http.Handler, middlewares ...Middleware) http.Handler {
-    // Apply in reverse so the first middleware is outermost
-    for i := len(middlewares) - 1; i >= 0; i-- {
-        h = middlewares[i](h)
-    }
-    return h
-}
-
-// RequestID injects a unique ID into every request context and response header
-func RequestID() Middleware {
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            id := r.Header.Get("X-Request-ID")
-            if id == "" {
-                id = newRequestID() // uuid or snowflake
-            }
-            ctx := context.WithValue(r.Context(), requestIDKey, id)
-            w.Header().Set("X-Request-ID", id)
-            next.ServeHTTP(w, r.WithContext(ctx))
-        })
-    }
-}
-
-// RequestLogger logs method, path, status, and duration for every request
-func RequestLogger(logger *zap.Logger) Middleware {
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            start := time.Now()
-            rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
-
-            next.ServeHTTP(rw, r)
-
-            requestID, _ := r.Context().Value(requestIDKey).(string)
-            logger.Info("http request",
-                zap.String("method", r.Method),
-                zap.String("path", r.URL.Path),
-                zap.Int("status", rw.status),
-                zap.Duration("duration", time.Since(start)),
-                zap.String("request_id", requestID),
-                zap.String("remote_addr", r.RemoteAddr),
-            )
-        })
-    }
-}
-
-// responseWriter wraps http.ResponseWriter to capture the status code
-type responseWriter struct {
-    http.ResponseWriter
-    status int
-}
-
-func (rw *responseWriter) WriteHeader(code int) {
-    rw.status = code
-    rw.ResponseWriter.WriteHeader(code)
-}
-
-// Recover converts panics in handlers into 500 responses
-func Recover(logger *zap.Logger) Middleware {
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            defer func() {
-                if p := recover(); p != nil {
-                    buf := make([]byte, 4096)
-                    n := runtime.Stack(buf, false)
-                    logger.Error("panic in handler",
-                        zap.Any("panic", p),
-                        zap.ByteString("stack", buf[:n]),
-                        zap.String("path", r.URL.Path),
-                    )
-                    http.Error(w, "internal server error", http.StatusInternalServerError)
-                }
-            }()
-            next.ServeHTTP(w, r)
-        })
-    }
-}
-```
-
----
-
-## 5. Request Decoding and Validation
-
-```go
-// internal/api/decode.go
-
-// decodeJSON decodes JSON from the request body with a size limit.
-// Returns a 400 with a structured error message on any decode failure.
-func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
-    r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB limit
-
-    dec := json.NewDecoder(r.Body)
-    dec.DisallowUnknownFields() // strict: reject extra fields
-
-    if err := dec.Decode(v); err != nil {
-        var syntaxErr *json.SyntaxError
-        var unmarshalErr *json.UnmarshalTypeError
-
-        switch {
-        case errors.As(err, &syntaxErr):
-            writeError(w, http.StatusBadRequest,
-                fmt.Sprintf("malformed JSON at position %d", syntaxErr.Offset))
-        case errors.As(err, &unmarshalErr):
-            writeError(w, http.StatusBadRequest,
-                fmt.Sprintf("field '%s' expects type %s", unmarshalErr.Field, unmarshalErr.Type))
-        case errors.Is(err, io.EOF):
-            writeError(w, http.StatusBadRequest, "request body is empty")
-        case err.Error() == "http: request body too large":
-            writeError(w, http.StatusRequestEntityTooLarge, "request body exceeds 1MB")
-        default:
-            writeError(w, http.StatusBadRequest, "invalid request body")
-        }
-        return false
-    }
-    return true
-}
-```
-
-### 5.1 Input Validation
-
-```go
-// Validate on the request struct, not in the handler
-type CreateRunRequest struct {
-    TargetURL   string        `json:"target_url"`
-    Concurrency int           `json:"concurrency"`
-    Duration    time.Duration `json:"duration_ms"`
-    RatePerSec  int           `json:"rate_per_sec"`
-}
-
-func (r CreateRunRequest) Validate() error {
-    if r.TargetURL == "" {
-        return fmt.Errorf("target_url is required")
-    }
-    if _, err := url.ParseRequestURI(r.TargetURL); err != nil {
-        return fmt.Errorf("target_url is not a valid URL: %w", err)
-    }
-    if r.Concurrency < 1 || r.Concurrency > 10000 {
-        return fmt.Errorf("concurrency must be between 1 and 10000, got %d", r.Concurrency)
-    }
-    if r.Duration < time.Second || r.Duration > 24*time.Hour {
-        return fmt.Errorf("duration must be between 1s and 24h")
-    }
-    return nil
-}
-```
-
-Validation in the request struct keeps handlers thin. The same `Validate()` method works in both HTTP handlers and CLI tools that share the same request type.
-
----
-
-## 6. Structured JSON Responses
-
-```go
-// internal/api/response.go
-
-type APIResponse struct {
-    Data  any    `json:"data,omitempty"`
-    Error string `json:"error,omitempty"`
-    Meta  *Meta  `json:"meta,omitempty"`
-}
-
-type Meta struct {
-    RequestID string `json:"request_id"`
-    Page      int    `json:"page,omitempty"`
-    Total     int64  `json:"total,omitempty"`
-}
-
-func writeJSON(w http.ResponseWriter, status int, data any) {
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(status)
-    if err := json.NewEncoder(w).Encode(APIResponse{Data: data}); err != nil {
-        // Can't write error at this point — headers already sent
-        // Log it; client will get a truncated response
-        log.Error("failed to encode response", zap.Error(err))
-    }
-}
-
-func writeError(w http.ResponseWriter, status int, msg string) {
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(status)
-    json.NewEncoder(w).Encode(APIResponse{Error: msg})
-}
-
-// Sentinel error → HTTP status mapping (from Chapter 4)
-func writeStoreError(w http.ResponseWriter, r *http.Request, logger *zap.Logger, err error) {
-    switch {
-    case errors.Is(err, store.ErrNotFound):
-        writeError(w, http.StatusNotFound, "resource not found")
-    case errors.Is(err, store.ErrInvalidInput):
-        writeError(w, http.StatusBadRequest, err.Error())
-    case errors.Is(err, context.DeadlineExceeded):
-        writeError(w, http.StatusGatewayTimeout, "operation timed out")
-    case errors.Is(err, context.Canceled):
-        // Client disconnected — don't write anything, connection is gone
-        return
-    default:
-        logger.Error("unhandled store error",
-            zap.String("path", r.URL.Path),
-            zap.String("method", r.Method),
-            zap.Error(err),
-        )
-        writeError(w, http.StatusInternalServerError, "internal server error")
-    }
-}
-```
-
----
-
-## 7. A Complete Run Handler
-
-Putting it all together — a handler that creates and starts a load test run:
-
-```go
-// internal/api/handlers/runs.go
-func (h *RunHandlers) CreateRun(w http.ResponseWriter, r *http.Request) {
-    var req CreateRunRequest
-    if !decodeJSON(w, r, &req) {
-        return // decodeJSON already wrote the error response
-    }
-
-    if err := req.Validate(); err != nil {
-        writeError(w, http.StatusBadRequest, err.Error())
-        return
-    }
-
-    run := store.Run{
-        ID:        newRunID(),
-        Config:    req.toRunConfig(),
-        Status:    store.RunStatusPending,
-        CreatedAt: time.Now(),
-    }
-
-    if err := h.runStore.Create(r.Context(), run); err != nil {
-        writeStoreError(w, r, h.logger, err)
-        return
-    }
-
-    // Start the run asynchronously — don't block the HTTP response
-    go func() {
-        // Use a fresh context — the request context will be cancelled after response
-        runCtx, cancel := context.WithTimeout(
-            context.Background(),
-            run.Config.Duration + 30*time.Second, // buffer for cleanup
-        )
-        defer cancel()
-
-        // Attach run ID for structured logging in the worker
-        runCtx = context.WithValue(runCtx, runIDKey, run.ID)
-
-        if err := h.pool.ExecuteRun(runCtx, run); err != nil {
-            h.logger.Error("run failed", zap.String("run_id", run.ID), zap.Error(err))
-            _ = h.runStore.UpdateStatus(context.Background(), run.ID, store.RunStatusFailed)
-            return
-        }
-        _ = h.runStore.UpdateStatus(context.Background(), run.ID, store.RunStatusCompleted)
-    }()
-
-    writeJSON(w, http.StatusCreated, run)
-}
-```
-
-**Design decision**: The run is started in a goroutine **with a fresh `context.Background()`-derived context**. Using `r.Context()` would cancel the run when the HTTP response is sent. The background context lives for `run.Duration + 30s`.
-
----
-
-## 8. Path Parameter Extraction
-
-Go 1.22 `ServeMux` path values:
-
-```go
-func (h *RunHandlers) GetRun(w http.ResponseWriter, r *http.Request) {
-    runID := r.PathValue("id") // extracts {id} from "GET /api/v1/runs/{id}"
-    if runID == "" {
-        writeError(w, http.StatusBadRequest, "run ID is required")
-        return
-    }
-
-    run, err := h.runStore.Get(r.Context(), runID)
-    if err != nil {
-        writeStoreError(w, r, h.logger, err)
-        return
-    }
-
-    writeJSON(w, http.StatusOK, run)
-}
-```
-
-For pre-1.22 Go, or more complex routing needs (regex, optional parameters), use `chi`:
-
-```go
-import "github.com/go-chi/chi/v5"
-
-r := chi.NewRouter()
-r.Use(middleware.RequestID)
-r.Use(middleware.Logger)
-
-r.Route("/api/v1/runs", func(r chi.Router) {
-    r.Get("/", listRunsHandler)
-    r.Post("/", createRunHandler)
-    r.Route("/{id}", func(r chi.Router) {
-        r.Get("/", getRunHandler)
-        r.Delete("/", stopRunHandler)
-        r.Get("/metrics", getMetricsHandler)
-    })
-})
-```
-
-`chi` is the preferred lightweight router for ARCHER — it uses the standard `http.Handler` interface, composes with all standard middleware, and adds no runtime dependencies beyond routing.
-
----
-
-## 9. Health and Readiness Endpoints
-
-Every ARCHER service must have:
-
-```go
-// /healthz — liveness: is the process alive?
-func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
-    writeJSON(w, http.StatusOK, map[string]string{
-        "status":  "ok",
-        "version": s.version,
-    })
-}
-
-// /readyz — readiness: is the service ready to handle traffic?
-func (s *Server) readinessHandler(w http.ResponseWriter, r *http.Request) {
-    checks := map[string]string{}
-    allOK := true
-
-    // Check database connectivity
-    if err := s.db.PingContext(r.Context()); err != nil {
-        checks["database"] = fmt.Sprintf("unhealthy: %v", err)
-        allOK = false
-    } else {
-        checks["database"] = "ok"
-    }
-
-    // Check Kafka connectivity
-    if err := s.kafkaProducer.Ping(r.Context()); err != nil {
-        checks["kafka"] = fmt.Sprintf("unhealthy: %v", err)
-        allOK = false
-    } else {
-        checks["kafka"] = "ok"
-    }
-
-    status := http.StatusOK
-    if !allOK {
-        status = http.StatusServiceUnavailable
-    }
-    writeJSON(w, status, checks)
-}
-```
-
-Kubernetes uses `/healthz` for liveness probes (restart if fails) and `/readyz` for readiness probes (stop sending traffic if fails). The distinction matters: a service can be alive but not ready (DB connection lost).
-
----
-
-## 10. Prometheus Metrics Endpoint
-
-```go
-import "github.com/prometheus/client_golang/prometheus/promhttp"
-
-// Mount Prometheus scrape endpoint
-mux.Handle("GET /metrics", promhttp.Handler())
-```
-
-Add HTTP-level metrics via the Prometheus middleware:
-
-```go
-import "github.com/prometheus/client_golang/prometheus/promhttp"
-
-func PrometheusMiddleware(reg prometheus.Registerer) Middleware {
-    requests := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-        Name: "http_requests_total",
-        Help: "Total HTTP requests by method, path, and status",
-    }, []string{"method", "path", "status"})
-
-    duration := promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-        Name:    "http_request_duration_seconds",
-        Buckets: prometheus.DefBuckets,
-    }, []string{"method", "path"})
-
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            start := time.Now()
-            rw := &responseWriter{ResponseWriter: w, status: 200}
-            next.ServeHTTP(rw, r)
-
-            path := r.Pattern // Go 1.22: matched route pattern, not raw path
-            requests.WithLabelValues(r.Method, path, strconv.Itoa(rw.status)).Inc()
-            duration.WithLabelValues(r.Method, path).Observe(time.Since(start).Seconds())
-        })
-    }
-}
-```
-
-Using `r.Pattern` (the route pattern, e.g. `/api/v1/runs/{id}`) instead of `r.URL.Path` prevents high-cardinality label explosion from unique run IDs.
-
----
-
-## 11. Graceful Shutdown (Complete Pattern)
-
-The shutdown from Chapter 8, fully integrated with the API server:
-
-```go
-// internal/api/server.go
-type Server struct {
-    cfg     config.ServerConfig
-    http    *http.Server
-    logger  *zap.Logger
-    // ... dependencies
-}
-
-func (s *Server) Run(ctx context.Context) error {
-    s.http = &http.Server{
-        Addr:              s.cfg.Addr,
-        Handler:           s.buildRoutes(),
-        ReadHeaderTimeout: 2 * time.Second,
-        ReadTimeout:       5 * time.Second,
-        WriteTimeout:      s.cfg.WriteTimeout,
-        IdleTimeout:       120 * time.Second,
-    }
-
-    errCh := make(chan error, 1)
-    go func() {
-        s.logger.Info("server starting", zap.String("addr", s.cfg.Addr))
-        if err := s.http.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-            errCh <- err
-        }
-    }()
-
-    select {
-    case err := <-errCh:
-        return fmt.Errorf("server error: %w", err)
-    case <-ctx.Done():
-    }
-
-    // Graceful shutdown
-    shutdownCtx, cancel := context.WithTimeout(context.Background(), s.cfg.ShutdownTimeout)
-    defer cancel()
-
-    s.logger.Info("server shutting down", zap.Duration("timeout", s.cfg.ShutdownTimeout))
-    if err := s.http.Shutdown(shutdownCtx); err != nil {
-        return fmt.Errorf("graceful shutdown failed: %w", err)
-    }
-    s.logger.Info("server stopped cleanly")
-    return nil
-}
-```
-
----
-
-## Key Takeaways
-
-1. **`net/http` + Go 1.22 ServeMux** is sufficient for ARCHER's API — no framework required.
-2. **Timeouts on every dimension** of `http.Server` — prevent resource exhaustion from slow clients.
-3. **Middleware chain** applies cross-cutting concerns: request ID, logging, recovery, metrics.
-4. **Handlers are thin closures** — decode, validate, delegate, respond.
-5. **Fresh context for async operations** started inside handlers — never use `r.Context()` for background work.
-6. **`/healthz` vs `/readyz`** — liveness vs readiness; Kubernetes depends on both being correct.
-7. **`r.Pattern` for Prometheus labels** — prevents cardinality explosion from path parameters.
-
----
-
-## Common Production Pitfalls
-
-| Pitfall | Consequence | Correct Approach |
-|---|---|---|
-| No `ReadHeaderTimeout` | Vulnerable to Slowloris DoS | Set 2s as minimum |
-| Using `r.URL.Path` in Prometheus labels | Cardinality explosion, OOM | Use `r.Pattern` (route template) |
-| `r.Context()` for background goroutines | Run cancelled when response sent | Use `context.Background()` derived context |
-| No `http.MaxBytesReader` on body | OOM from large payload attacks | Limit in `decodeJSON` helper |
-| Writing response after `WriteHeader` | Logs "superfluous response.WriteHeader call" | Return immediately after any response write |
-| Global handler state | Race conditions under load | All state via dependency injection |
-| No `/readyz` check for downstream deps | Pod marked ready before DB connected | Check DB/Kafka ping in readiness handler |
-
----
-
-## Production Checklist
-
-- [ ] All `http.Server` timeout fields set (ReadHeader, Read, Write, Idle)
-- [ ] `http.MaxBytesReader` on all request body reads
-- [ ] Request ID middleware generates and propagates ID header
-- [ ] Recover middleware on all handlers
-- [ ] `r.Pattern` used in Prometheus metric labels
-- [ ] `/healthz` (liveness) and `/readyz` (readiness) endpoints implemented
-- [ ] `/metrics` Prometheus scrape endpoint mounted
-- [ ] `server.Shutdown(ctx)` used for graceful drain — never `server.Close()`
-- [ ] Background goroutines in handlers use `context.Background()`-derived contexts
-- [ ] `json.Decoder.DisallowUnknownFields()` on request decoding
-
----
-
-## Mini Backend Exercise
-
-**Task:** Build the ARCHER run management API:
-1. `POST /api/v1/runs` — create a run (validate target URL, concurrency 1–1000, duration 1s–1h)
-2. `GET /api/v1/runs/{id}` — get a run by ID
-3. `GET /api/v1/runs` — list all runs (with status filter query param)
-4. `DELETE /api/v1/runs/{id}` — stop a running run (cancel its context)
-5. Wire with `MemoryRunStore` from Chapter 2
-6. Add request logging middleware
-7. Test with `curl` and verify structured log output
-
----
-
-## Systems-Oriented Exercise
-
-Design the ARCHER API's middleware stack for production:
-1. What order should middlewares apply? (outermost to innermost)
-2. Where should rate limiting middleware sit relative to auth middleware?
-3. How does the Prometheus middleware interact with the RequestID middleware?
-4. What happens if the Recover middleware is placed inside the RequestLogger? Outside?
-5. Draw the middleware execution order for a single request.
-
----
-
-## How This Maps to the ARCHER Architecture
-
-| ARCHER API Endpoint | Handler Pattern |
-|---|---|
-| `POST /runs` | Decode → Validate → Store → Start async goroutine → 201 |
-| `GET /runs/{id}/metrics` | Validate ID → Query store with timeout → Stream JSON |
-| `GET /runs/{id}/percentiles` | Validate ID → Compute in handler or pre-aggregated → JSON |
-| `DELETE /runs/{id}` | Cancel run context → Update status → 204 |
-| `GET /healthz` | Static response — no I/O |
-| `GET /readyz` | DB ping + Kafka ping with 2s timeout → 200/503 |
-| `GET /metrics` | `promhttp.Handler()` — handled by Prometheus library |
-
----
-
-## What Actually Matters for the Hackathon
-
-- Go 1.22 ServeMux method routing removes the need for `gorilla/mux` — check your Go version
-- The `writeError`/`writeJSON` + `writeStoreError` pattern saves 10+ lines per handler
-- Set **all** `http.Server` timeout fields on Day 1 — they are invisible until a demo goes wrong under load
-- The `/readyz` → DB ping pattern prevents Kubernetes from routing traffic to a pod before it's ready
-
----
-
-## What Can Be Ignored for Now
-
-- HTTP/2 push — browser feature, not relevant for a backend benchmarking API
-- Content negotiation (Accept headers) — JSON only for ARCHER
-- HATEOAS / HAL response format — over-engineered for this use case
-- OpenAPI code generation — generate the spec manually; don't add a generation step to the build
-- gRPC — relevant if ARCHER needs inter-service RPC at high throughput; REST is sufficient for the API gateway
-
----
-
-*Next chapter: WebSocket Systems in Go — adding real-time push capability to the ARCHER API for live dashboard updates during load test runs.*
-
-
----
-
-# Chapter 10 — WebSocket Systems in Go
-
-> **Engineering Learning Booklet | ARCHER Backend Architecture Series**
-> *Real-time bidirectional communication, the Hub pattern, and live dashboard delivery for distributed backend systems.*
-
----
-
-## 1. Why WebSockets in ARCHER
-
-The ARCHER load test dashboard needs to display live metrics: requests/second, P95 latency, error rate, active workers — all updating in real time as a load test runs. HTTP polling (client requests every N seconds) wastes connections and introduces latency proportional to the polling interval.
-
-WebSockets solve this: a single persistent TCP connection, upgraded from HTTP, through which the server pushes data to the client as it becomes available. In ARCHER, the flow is:
-
-```
-Load Generator → MetricAccumulator → Telemetry Pipeline → WebSocket Hub → Dashboard Browser
-```
-
-Every result from a worker is aggregated, and the current stats snapshot is broadcast to all connected dashboard clients every second.
-
----
-
-## 2. The WebSocket Upgrade
-
-A WebSocket connection begins as an HTTP/1.1 request with specific upgrade headers. The server responds with `101 Switching Protocols` and the TCP connection is handed off to the WebSocket protocol.
-
-```go
-import "github.com/gorilla/websocket"
-
-var upgrader = websocket.Upgrader{
-    ReadBufferSize:  1024,
-    WriteBufferSize: 1024,
-    // CheckOrigin validates the Origin header — critical for production
-    CheckOrigin: func(r *http.Request) bool {
-        origin := r.Header.Get("Origin")
-        return isAllowedOrigin(origin, allowedOrigins)
-    },
-    // Compress messages — reduces bandwidth for JSON payloads
-    EnableCompression: true,
-}
-
-func wsHandler(hub *Hub) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        conn, err := upgrader.Upgrade(w, r, nil)
-        if err != nil {
-            // Upgrade failure is logged but not returned — response already sent
-            log.Error("websocket upgrade failed", zap.Error(err))
-            return
-        }
-        // Connection is live — hand off to hub
-        hub.ServeClient(r.Context(), conn)
-    }
-}
-```
-
-**`CheckOrigin` is not optional in production.** Without it, any website can initiate a WebSocket connection to your server from a user's browser (CSRF via WebSocket). Always validate the `Origin` header against your allowlist.
-
----
-
-## 3. The Hub Pattern — Single-Goroutine Ownership
-
-The WebSocket hub is the canonical Go solution for managing concurrent client connections. The core insight from Chapter 6: **one goroutine owns the mutable subscriber map; all other goroutines communicate via channels**.
-
-```go
-// internal/websocket/hub.go
-package websocket
-
-import (
-    "context"
-    "sync"
-    "time"
-
-    "github.com/gorilla/websocket"
-    "go.uber.org/zap"
-)
-
-// Client represents a connected WebSocket client.
-type Client struct {
-    conn   *websocket.Conn
-    send   chan []byte     // outbound message buffer
-    runID  string          // which run this client is watching
-    cancel context.CancelFunc
-}
-
-// Hub manages all active WebSocket connections.
-type Hub struct {
-    // Channels for client registration — the ONLY way to touch the clients map
-    register   chan *Client
-    unregister chan *Client
-    broadcast  chan BroadcastMsg
-
-    // Owned exclusively by the Run() goroutine — NO external access
-    clients map[string]map[*Client]bool // runID → set of clients
-
-    logger *zap.Logger
-}
-
-type BroadcastMsg struct {
-    RunID   string
-    Payload []byte
-}
-
-func NewHub(logger *zap.Logger) *Hub {
-    return &Hub{
-        register:   make(chan *Client),
-        unregister: make(chan *Client),
-        broadcast:  make(chan BroadcastMsg, 512),
-        clients:    make(map[string]map[*Client]bool),
-        logger:     logger,
-    }
-}
-
-// Run is the hub's single goroutine — sole owner of the clients map.
-func (h *Hub) Run(ctx context.Context) {
-    for {
-        select {
-        case <-ctx.Done():
-            // Shutdown: close all client send channels
-            for _, runClients := range h.clients {
-                for client := range runClients {
-                    client.cancel()
-                    close(client.send)
-                }
-            }
-            return
-
-        case client := <-h.register:
-            if _, ok := h.clients[client.runID]; !ok {
-                h.clients[client.runID] = make(map[*Client]bool)
-            }
-            h.clients[client.runID][client] = true
-            h.logger.Info("client registered",
-                zap.String("run_id", client.runID),
-                zap.Int("total", len(h.clients[client.runID])),
-            )
-
-        case client := <-h.unregister:
-            if runClients, ok := h.clients[client.runID]; ok {
-                if _, ok := runClients[client]; ok {
-                    delete(runClients, client)
-                    close(client.send)
-                    if len(runClients) == 0 {
-                        delete(h.clients, client.runID)
-                    }
-                }
-            }
-
-        case msg := <-h.broadcast:
-            runClients, ok := h.clients[msg.RunID]
-            if !ok {
-                continue // no clients watching this run
-            }
-            for client := range runClients {
-                select {
-                case client.send <- msg.Payload:
-                default:
-                    // Client send buffer full — slow consumer; drop and disconnect
-                    h.logger.Warn("client send buffer full, disconnecting",
-                        zap.String("run_id", msg.RunID),
-                    )
-                    delete(runClients, client)
-                    close(client.send)
-                }
-            }
-        }
-    }
-}
-
-// Broadcast sends a message to all clients watching a specific run.
-// Safe to call from any goroutine.
-func (h *Hub) Broadcast(runID string, payload []byte) {
-    select {
-    case h.broadcast <- BroadcastMsg{RunID: runID, Payload: payload}:
-    default:
-        // Hub broadcast buffer full — system under pressure, drop this tick
-    }
-}
-```
-
-No mutex on `h.clients`. The `select` in `Run()` ensures only one operation modifies the map at a time. This is the CSP ownership model at production scale.
-
----
-
-## 4. Client Goroutines — Read Pump and Write Pump
-
-Each WebSocket client requires two goroutines:
-- **Read pump** — reads messages from the client (for ping/pong, control frames, or client-sent commands)
-- **Write pump** — writes messages from the `send` channel to the WebSocket connection
-
-```go
-// internal/websocket/client.go
-
-const (
-    writeWait      = 10 * time.Second  // time allowed to write a message
-    pongWait       = 60 * time.Second  // time allowed to read next pong from client
-    pingPeriod     = (pongWait * 9) / 10 // send pings at 90% of pongWait
-    maxMessageSize = 512               // max incoming message size (bytes)
-)
-
-// ServeClient registers the client with the hub and starts read/write pumps.
-func (h *Hub) ServeClient(parentCtx context.Context, conn *websocket.Conn) {
-    runID := extractRunID(conn) // from query param or subprotocol
-
-    ctx, cancel := context.WithCancel(parentCtx)
-    client := &Client{
-        conn:   conn,
-        send:   make(chan []byte, 256),
-        runID:  runID,
-        cancel: cancel,
-    }
-
-    h.register <- client
-
-    // Start pumps — they coordinate via client.send channel
-    go client.writePump(ctx)
-    client.readPump(h) // runs in the calling goroutine; blocks until disconnect
-}
-
-// readPump handles incoming messages and detects client disconnection.
-func (c *Client) readPump(h *Hub) {
-    defer func() {
-        h.unregister <- c
-        c.conn.Close()
-    }()
-
-    c.conn.SetReadLimit(maxMessageSize)
-    c.conn.SetReadDeadline(time.Now().Add(pongWait))
-    c.conn.SetPongHandler(func(string) error {
-        c.conn.SetReadDeadline(time.Now().Add(pongWait))
-        return nil
-    })
-
-    for {
-        _, msg, err := c.conn.ReadMessage()
-        if err != nil {
-            if websocket.IsUnexpectedCloseError(err,
-                websocket.CloseGoingAway,
-                websocket.CloseAbnormalClosure,
-            ) {
-                log.Warn("unexpected websocket close", zap.Error(err))
-            }
-            return // triggers deferred unregister
-        }
-        // Handle client-sent commands (e.g., subscribe to a different run)
-        handleClientMessage(c, msg)
-    }
-}
-
-// writePump sends messages from the send channel to the WebSocket connection.
-func (c *Client) writePump(ctx context.Context) {
-    ticker := time.NewTicker(pingPeriod)
-    defer func() {
-        ticker.Stop()
-        c.conn.Close()
-    }()
-
-    for {
-        select {
-        case <-ctx.Done():
-            c.conn.WriteMessage(websocket.CloseMessage,
-                websocket.FormatCloseMessage(websocket.CloseGoingAway, "server shutdown"))
-            return
-
-        case msg, ok := <-c.send:
-            c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-            if !ok {
-                // Hub closed the send channel
-                c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-                return
-            }
-            // Batch pending messages into a single write (optimization)
-            w, err := c.conn.NextWriter(websocket.TextMessage)
-            if err != nil {
-                return
-            }
-            w.Write(msg)
-
-            // Drain buffered messages into the same write
-            n := len(c.send)
-            for i := 0; i < n; i++ {
-                w.Write([]byte{'\n'})
-                w.Write(<-c.send)
-            }
-            w.Close()
-
-        case <-ticker.C:
-            // Send ping to detect dead connections
-            c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-            if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-                return
-            }
-        }
-    }
-}
-```
-
-**The ping/pong mechanism:** WebSocket connections can silently die (network partition, NAT timeout, phone going to sleep). The ticker sends a `PingMessage` every 54 seconds. If no `PongMessage` arrives within 60 seconds, `ReadMessage` times out and the read pump exits, triggering cleanup. Without this, dead connections accumulate indefinitely.
-
----
-
-## 5. Connecting the Pipeline to the Hub
-
-The telemetry pipeline produces metric snapshots every second. The hub broadcasts them to watching clients:
-
-```go
-// internal/telemetry/broadcaster.go
-package telemetry
-
-import (
-    "context"
-    "encoding/json"
-    "time"
-
-    wsHub "github.com/org/archer/internal/websocket"
-)
-
-type MetricBroadcaster struct {
-    hub         *wsHub.Hub
-    accumulator *MetricAccumulator
-    interval    time.Duration
-}
-
-func NewMetricBroadcaster(hub *wsHub.Hub, acc *MetricAccumulator, interval time.Duration) *MetricBroadcaster {
-    return &MetricBroadcaster{hub: hub, accumulator: acc, interval: interval}
-}
-
-func (b *MetricBroadcaster) Run(ctx context.Context, runID string) {
-    ticker := time.NewTicker(b.interval)
-    defer ticker.Stop()
-
-    for {
-        select {
-        case <-ctx.Done():
-            // Broadcast final snapshot before shutdown
-            b.broadcastSnapshot(runID)
-            return
-        case <-ticker.C:
-            b.broadcastSnapshot(runID)
-        }
-    }
-}
-
-func (b *MetricBroadcaster) broadcastSnapshot(runID string) {
-    snapshot := b.accumulator.Snapshot()
-    payload, err := json.Marshal(snapshot)
-    if err != nil {
-        return
-    }
-    b.hub.Broadcast(runID, payload)
-}
-```
-
-The wire format (JSON snapshot sent every second):
-
-```json
-{
-  "run_id": "run-abc123",
-  "timestamp": "2026-05-10T02:30:00Z",
-  "total_requests": 15420,
-  "requests_per_sec": 487.3,
-  "error_rate": 0.012,
-  "p50_ms": 45,
-  "p95_ms": 112,
-  "p99_ms": 198,
-  "active_workers": 50,
-  "status_counts": {"200": 15235, "500": 185}
-}
-```
-
----
-
-## 6. WebSocket Route Registration
-
-```go
-// In internal/api/server.go buildRoutes():
-mux.HandleFunc("GET /api/v1/runs/{id}/ws", wsHandler(s.hub))
-
-// The handler extracts the run ID and passes it to the hub
-func wsHandler(hub *Hub) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        runID := r.PathValue("id")
-        conn, err := upgrader.Upgrade(w, r, nil)
-        if err != nil {
-            return
-        }
-        hub.ServeClientForRun(r.Context(), conn, runID)
-    }
-}
-```
-
-This allows multiple dashboard tabs, each watching different run IDs, to receive only their relevant metric stream.
-
----
-
-## 7. Message Protocol Design
-
-For ARCHER's dashboard WebSocket, messages flow in both directions:
-
-```
-Client → Server:
-  { "type": "subscribe", "run_id": "run-abc" }   — subscribe to a different run
-  { "type": "ping" }                              — client-side keepalive
-
-Server → Client:
-  { "type": "metrics", "run_id": "run-abc", "data": {...} }  — periodic snapshot
-  { "type": "run_complete", "run_id": "run-abc", "report": {...} } — run finished
-  { "type": "error", "message": "run not found" }  — error notification
-```
-
-Encode message type in a wrapper envelope rather than inferring type from structure — explicit typing is more robust when you add new message types:
-
-```go
-type WSMessage struct {
-    Type    string          `json:"type"`
-    RunID   string          `json:"run_id,omitempty"`
-    Data    json.RawMessage `json:"data,omitempty"`
-    Message string          `json:"message,omitempty"`
-}
-
-func encodeMessage(msgType string, runID string, data any) ([]byte, error) {
-    payload, err := json.Marshal(data)
-    if err != nil {
-        return nil, err
-    }
-    return json.Marshal(WSMessage{
-        Type:  msgType,
-        RunID: runID,
-        Data:  json.RawMessage(payload),
-    })
-}
-```
-
----
-
-## 8. Scaling WebSocket Connections
-
-A single Go process with the Hub pattern handles tens of thousands of concurrent WebSocket connections efficiently — each client requires ~2 goroutines + the send channel buffer (256 × ~32 bytes for JSON = ~8KB). For 10,000 clients: 20,000 goroutines × 2KB = 40MB + 80MB for buffers = ~120MB. Reasonable.
-
-**When you need to scale beyond one process:**
-
-The Hub pattern breaks across multiple API server instances. A message broadcast on instance A does not reach clients connected to instance B. Solutions:
-
-1. **Redis Pub/Sub** — publish broadcast messages to Redis; all instances subscribe
-2. **Sticky sessions** — route clients watching the same run to the same instance (Kubernetes sessionAffinity)
-3. **Shared message broker** — Kafka topic per run; all instances consume and broadcast locally
-
-For ARCHER's hackathon scope, sticky sessions are sufficient. For production scale, Redis Pub/Sub:
-
-```go
-// internal/websocket/redis_pubsub.go
-func (h *Hub) SubscribeToRedis(ctx context.Context, rdb *redis.Client) {
-    sub := rdb.Subscribe(ctx, "archer:broadcasts")
-    ch := sub.Channel()
-
-    go func() {
-        defer sub.Close()
-        for {
-            select {
-            case <-ctx.Done():
-                return
-            case msg := <-ch:
-                var bcast BroadcastMsg
-                if err := json.Unmarshal([]byte(msg.Payload), &bcast); err != nil {
-                    continue
-                }
-                h.Broadcast(bcast.RunID, bcast.Payload)
-            }
-        }
-    }()
-}
-
-// Publishing side (telemetry pipeline)
-func (b *MetricBroadcaster) broadcastViaRedis(ctx context.Context, runID string, payload []byte) {
-    msg := BroadcastMsg{RunID: runID, Payload: payload}
-    data, _ := json.Marshal(msg)
-    b.rdb.Publish(ctx, "archer:broadcasts", data)
-}
-```
-
----
-
-## Key Takeaways
-
-1. **Hub pattern = single goroutine owns the subscriber map** — no mutex required on the client set.
-2. **Two goroutines per client**: read pump detects disconnection; write pump batches outbound messages.
-3. **Ping/pong keepalive** is not optional — silent disconnections accumulate without it.
-4. **`CheckOrigin` is a security requirement** — never use `func(r *http.Request) bool { return true }` in production.
-5. **Client send buffer overflow = drop and disconnect** — a slow consumer must not stall the hub.
-6. **Broadcast to run-scoped client sets** — enables multi-run dashboard with minimal overhead.
-7. **Cross-instance broadcast requires Redis Pub/Sub or sticky sessions** — the Hub pattern is per-process.
-
----
-
-## Common Production Pitfalls
-
-| Pitfall | Consequence | Correct Approach |
-|---|---|---|
-| No `CheckOrigin` validation | CSRF via WebSocket from any origin | Validate Origin against allowlist |
-| No ping/pong mechanism | Dead connections accumulate silently | Ticker + `SetPongHandler` + `SetReadDeadline` |
-| No write deadline on `WriteMessage` | Slow client blocks write pump goroutine | `SetWriteDeadline` before every write |
-| Mutex on client map | Contention bottleneck under many clients | Hub pattern: single-goroutine ownership |
-| Sending to closed `client.send` | Panic | Only hub goroutine closes `client.send`; it knows the state |
-| No send buffer overflow handling | Slow client stalls all broadcasts | `select { default: disconnect }` on full buffer |
-| `r.Context()` for Hub.Run | Hub shuts down when first request ends | Hub runs with server-level context from `main()` |
-
----
-
-## Production Checklist
-
-- [ ] `CheckOrigin` validates against configured allowlist
-- [ ] `SetReadDeadline` updated by `PongHandler` on every pong received
-- [ ] `SetWriteDeadline` set before every `WriteMessage` call
-- [ ] Ping ticker running in write pump at 90% of `pongWait`
-- [ ] Send buffer overflow disconnects slow clients (never blocks hub)
-- [ ] Hub running with server-level context — not request context
-- [ ] Goroutine count monitored — 2 goroutines per client expected
-- [ ] `websocket.IsUnexpectedCloseError` used to suppress normal close log noise
-- [ ] Message envelope with `type` field for extensible protocol
-
----
-
-## Mini Backend Exercise
-
-**Task:** Build a `MetricHub` that:
-1. Accepts clients subscribing to a `run_id`
-2. Broadcasts a JSON snapshot every second to all clients watching that run
-3. Simulates metric data (random latency values) to broadcast
-4. Handles client disconnect cleanly (read pump exits → unregister)
-5. Run 5 concurrent test clients using `gorilla/websocket` in the test
-
----
-
-## How This Maps to the ARCHER Architecture
-
-| Component | WebSocket Role |
-|---|---|
-| `Hub` | Manages all dashboard client connections; receives from telemetry broadcaster |
-| `MetricBroadcaster` | Runs alongside the load generator; snapshots accumulator every second |
-| API Server | Upgrades `/api/v1/runs/{id}/ws` requests to WebSocket connections |
-| Dashboard Client | Browser WebSocket connecting to watch a specific run |
-| Run Completion | Hub broadcasts `run_complete` event; clients can stop polling |
-
----
-
-*Next chapter: Kafka Integration and Event-Driven Systems in Go — durable event streaming for the telemetry pipeline.*

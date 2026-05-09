@@ -1,0 +1,1855 @@
+# ARCHER Go Engineering Handbook
+
+## Volume 5
+
+### High-Performance Distributed Architecture and ARCHER Systems Design
+
+#### Mayank Tripathi
+
+---
+
+> *Volume 5 of 5 — The ARCHER Go Engineering Handbook Series*
+>
+> *A production-grade distributed systems engineering curriculum for backend engineers building infrastructure in Go.*
+
+---
+
+## Preface — Volume 5
+
+Volume 5 is the capstone. It does not introduce new infrastructure components. It synthesizes everything built across the previous four volumes, pushes the architecture to its performance limits, and teaches the engineering mindset required to operate it under production conditions.
+
+The background workers chapter addresses a problem that every long-running backend must solve: how do you manage services that must run continuously, recover from failure automatically, and report health accurately? The `Worker` interface and `Orchestrator` pattern provide a uniform answer — each background service implements `Name()` and `Run(ctx)`, declares a restart policy (Never, OnFailure, Always), and is supervised by the orchestrator with exponential backoff and jitter. The `RunManager` applies this pattern to load test runs specifically: run-scoped contexts, user abort via `cancel()`, and cleanup that uses `context.Background()` after the run context has expired.
+
+The real-time systems chapter examines the ARCHER latency budget in precise terms. The WebSocket path from worker result to browser frame must be under 70ms end-to-end. The Kafka-to-DB path is under 665ms. These two paths are independent failure domains — a slow database write must never delay a dashboard update. The chapter covers the event sourcing mental model, fixed-interval tickers vs debounce, slow-client backpressure isolation, reconnection state recovery, and in-process alert detection with deduplication.
+
+Chapter 19 is the architectural synthesis. Every component built across 19 chapters is mapped into a single coherent view: the complete data flow from load generator goroutine to browser WebSocket frame, the goroutine topology of each binary, the channel ownership map for every inter-goroutine communication path, the error propagation map from every failure mode, the Kafka event flow, the Kubernetes deployment topology, and the complete SIGTERM-to-exit shutdown timeline. This chapter is a reference you will return to whenever you need to reason about the whole system.
+
+Chapter 20 is about something no API reference teaches: how strong engineers think. Failure mode analysis before writing code. The three questions before any change. Operational simplicity as a design constraint. The "follow the data" debugging discipline. Explicit tradeoff documentation. The five-day hackathon build sequence. The concurrency mental checklist. The 40-item production readiness audit. These are the habits and practices that separate a system that works in a demo from one that works at 3am under load.
+
+**Chapters in this volume:**
+
+| Chapter | Title | Core Concept |
+|---------|-------|--------------|
+| 17 | Building Scalable Background Workers in Go | Worker interface, Orchestrator, retry with jitter, RunManager |
+| 18 | Real-Time Systems Design in Go | Latency budget, event sourcing, backpressure isolation, alert detection |
+| 19 | How the Complete ARCHER Backend Architecture Fits Together | Full system synthesis: data flow, goroutine topology, deployment, observability |
+| 20 | Production Engineering Mindset for Distributed Systems | Failure thinking, debugging discipline, tradeoffs, production readiness audit |
+
+**Companion volumes:**
+- *Volume 1* — Foundations of Go Systems Engineering (Chapters 1–4)
+- *Volume 2* — Concurrency, Worker Systems, and Go Runtime Thinking (Chapters 5–8)
+- *Volume 3* — APIs, WebSockets, Kafka, and Distributed Communication (Chapters 9–12)
+- *Volume 4* — Telemetry, Infrastructure Systems, and Production Backend Engineering (Chapters 13–16)
+
+---
+
+## Table of Contents — Volume 5
+
+17. [Building Scalable Background Workers in Go](#chapter-17--building-scalable-background-workers-in-go)
+18. [Real-Time Systems Design in Go](#chapter-18--real-time-systems-design-in-go)
+19. [How the Complete ARCHER Backend Architecture Fits Together](#chapter-19--how-the-complete-archer-backend-architecture-fits-together)
+20. [Production Engineering Mindset for Distributed Systems](#chapter-20--production-engineering-mindset-for-distributed-systems)
+
+---
+
+
+---
+
+# Chapter 17 — Building Scalable Background Workers in Go
+
+> **Engineering Learning Booklet | ARCHER Backend Architecture Series**
+> *Durable job orchestration, retry semantics, worker health, and distributed task coordination for production backends.*
+
+---
+
+## 1. Background Workers vs Request Handlers
+
+An HTTP request handler lives for milliseconds — it reads a request, computes a response, and exits. A background worker lives for the lifetime of the service — it continuously processes work from a queue, recovers from failures, and reports health.
+
+The ARCHER platform has several background worker categories:
+
+| Worker Type | Trigger | Lifetime | Failure Behavior |
+|---|---|---|---|
+| Load Test Runner | API request | Duration of run (seconds–hours) | Cancel run; report failure |
+| Kafka Telemetry Consumer | Service start | Process lifetime | Restart with backoff |
+| Metric Aggregator | Ticker (1s) | Process lifetime | Log error; continue |
+| Report Generator | Run completion event | Seconds | Retry 3×; mark failed |
+| WebSocket Broadcaster | Run start | Duration of run | Stop broadcasting; clients reconnect |
+
+Each type has different lifecycle, restart, and failure semantics. This chapter builds the orchestration layer that manages them all.
+
+---
+
+## 2. The Worker Interface
+
+```go
+// internal/worker/worker.go
+package worker
+
+import "context"
+
+// Worker is the interface for all background task executors in ARCHER.
+type Worker interface {
+    Name() string
+    Run(ctx context.Context) error
+}
+
+// RestartPolicy controls how a failed worker is handled.
+type RestartPolicy int
+
+const (
+    RestartNever      RestartPolicy = iota // run once; don't restart on error
+    RestartOnFailure                       // restart only if error != nil
+    RestartAlways                          // restart regardless of exit reason
+)
+
+// WorkerSpec describes a worker and its operational parameters.
+type WorkerSpec struct {
+    Worker        Worker
+    Policy        RestartPolicy
+    MaxRestarts   int           // 0 = unlimited
+    InitialDelay  time.Duration // backoff before first restart
+    MaxDelay      time.Duration // cap on backoff
+}
+```
+
+---
+
+## 3. The Orchestrator
+
+The orchestrator manages multiple workers, their lifecycles, restart policies, and health state:
+
+```go
+// internal/worker/orchestrator.go
+package worker
+
+import (
+    "context"
+    "sync"
+    "time"
+    "go.uber.org/zap"
+)
+
+type workerState struct {
+    spec     WorkerSpec
+    restarts int
+    healthy  bool
+    lastErr  error
+    mu       sync.RWMutex
+}
+
+func (s *workerState) setHealth(healthy bool, err error) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    s.healthy = healthy
+    s.lastErr = err
+}
+
+func (s *workerState) isHealthy() bool {
+    s.mu.RLock()
+    defer s.mu.RUnlock()
+    return s.healthy
+}
+
+type Orchestrator struct {
+    workers []*workerState
+    logger  *zap.Logger
+    wg      sync.WaitGroup
+}
+
+func NewOrchestrator(logger *zap.Logger) *Orchestrator {
+    return &Orchestrator{logger: logger}
+}
+
+func (o *Orchestrator) Register(specs ...WorkerSpec) {
+    for _, spec := range specs {
+        o.workers = append(o.workers, &workerState{spec: spec, healthy: false})
+    }
+}
+
+// Run starts all registered workers and supervises them per their RestartPolicy.
+func (o *Orchestrator) Run(ctx context.Context) {
+    for _, state := range o.workers {
+        state := state
+        o.wg.Add(1)
+        go func() {
+            defer o.wg.Done()
+            o.supervise(ctx, state)
+        }()
+    }
+    o.wg.Wait()
+}
+
+func (o *Orchestrator) supervise(ctx context.Context, state *workerState) {
+    delay := state.spec.InitialDelay
+    if delay == 0 {
+        delay = time.Second
+    }
+
+    for {
+        state.setHealth(true, nil)
+        o.logger.Info("worker starting", zap.String("worker", state.spec.Worker.Name()))
+
+        err := state.spec.Worker.Run(ctx)
+
+        state.setHealth(false, err)
+
+        // Clean context cancellation — shutdown, not failure
+        if ctx.Err() != nil {
+            o.logger.Info("worker stopped cleanly", zap.String("worker", state.spec.Worker.Name()))
+            return
+        }
+
+        // Check restart policy
+        if state.spec.Policy == RestartNever {
+            if err != nil {
+                o.logger.Error("worker failed (no restart)", zap.String("worker", state.spec.Worker.Name()), zap.Error(err))
+            }
+            return
+        }
+        if state.spec.Policy == RestartOnFailure && err == nil {
+            o.logger.Info("worker exited cleanly (no restart)", zap.String("worker", state.spec.Worker.Name()))
+            return
+        }
+
+        state.restarts++
+        if state.spec.MaxRestarts > 0 && state.restarts > state.spec.MaxRestarts {
+            o.logger.Error("worker exceeded max restarts",
+                zap.String("worker", state.spec.Worker.Name()),
+                zap.Int("restarts", state.restarts),
+                zap.Error(err),
+            )
+            return
+        }
+
+        o.logger.Warn("worker restarting",
+            zap.String("worker", state.spec.Worker.Name()),
+            zap.Int("restart", state.restarts),
+            zap.Duration("backoff", delay),
+            zap.Error(err),
+        )
+
+        select {
+        case <-ctx.Done():
+            return
+        case <-time.After(delay):
+        }
+
+        // Exponential backoff with cap
+        delay = min(delay*2, state.spec.MaxDelay)
+    }
+}
+
+// Wait blocks until all workers have exited.
+func (o *Orchestrator) Wait() { o.wg.Wait() }
+
+// HealthSummary returns health status of all workers.
+func (o *Orchestrator) HealthSummary() map[string]bool {
+    summary := make(map[string]bool)
+    for _, s := range o.workers {
+        summary[s.spec.Worker.Name()] = s.isHealthy()
+    }
+    return summary
+}
+```
+
+Usage in `main()`:
+
+```go
+orch := worker.NewOrchestrator(logger)
+
+orch.Register(
+    worker.WorkerSpec{
+        Worker: kafka.NewConsumerWorker(cfg.Kafka, metricStore, logger),
+        Policy: worker.RestartOnFailure,
+        MaxRestarts:  10,
+        InitialDelay: time.Second,
+        MaxDelay:     30 * time.Second,
+    },
+    worker.WorkerSpec{
+        Worker: telemetry.NewPipelineWorker(pipeline),
+        Policy: worker.RestartOnFailure,
+        MaxRestarts:  5,
+        InitialDelay: 500 * time.Millisecond,
+        MaxDelay:     10 * time.Second,
+    },
+    worker.WorkerSpec{
+        Worker: websocket.NewHubWorker(hub),
+        Policy: worker.RestartAlways,
+        MaxRestarts: 0, // unlimited — hub must always be running
+    },
+)
+
+go orch.Run(ctx)
+```
+
+---
+
+## 4. Implementing Workers
+
+Each background function wraps in a struct implementing the `Worker` interface:
+
+```go
+// internal/kafka/consumer_worker.go
+type ConsumerWorker struct {
+    consumer *Consumer
+    logger   *zap.Logger
+}
+
+func (w *ConsumerWorker) Name() string { return "kafka-consumer" }
+
+func (w *ConsumerWorker) Run(ctx context.Context) error {
+    w.logger.Info("kafka consumer worker started")
+    return w.consumer.Run(ctx) // from Chapter 11
+}
+
+// internal/websocket/hub_worker.go
+type HubWorker struct{ hub *Hub }
+
+func (w *HubWorker) Name() string                   { return "websocket-hub" }
+func (w *HubWorker) Run(ctx context.Context) error  { w.hub.Run(ctx); return nil }
+```
+
+The `Worker` interface ensures all background services are managed uniformly — health tracking, restart policy, and backoff are orchestrator concerns, not individual worker concerns.
+
+---
+
+## 5. Run-Scoped Workers — The Load Test Runner
+
+A load test run is a temporary worker: it exists for the duration of one run, then exits. The run manager creates and tracks these:
+
+```go
+// internal/loadgen/run_manager.go
+package loadgen
+
+import (
+    "context"
+    "fmt"
+    "sync"
+    "time"
+)
+
+type RunManager struct {
+    activeRuns  map[string]*activeRun
+    mu          sync.RWMutex
+    store       store.RunStore
+    orch        *worker.Orchestrator
+    logger      *zap.Logger
+}
+
+type activeRun struct {
+    runID   string
+    cancel  context.CancelFunc
+    started time.Time
+    done    chan struct{}
+}
+
+func (m *RunManager) StartRun(ctx context.Context, cfg RunConfig) (string, error) {
+    runID := newRunID()
+
+    // Create a run-scoped context — cancelled by user abort or duration timeout
+    runCtx, cancel := context.WithTimeout(ctx, cfg.Duration+30*time.Second)
+
+    run := &activeRun{
+        runID:   runID,
+        cancel:  cancel,
+        started: time.Now(),
+        done:    make(chan struct{}),
+    }
+
+    m.mu.Lock()
+    m.activeRuns[runID] = run
+    m.mu.Unlock()
+
+    if err := m.store.Create(ctx, store.Run{ID: runID, Config: cfg, Status: store.StatusRunning}); err != nil {
+        cancel()
+        return "", fmt.Errorf("create run: %w", err)
+    }
+
+    go func() {
+        defer func() {
+            cancel()
+            m.mu.Lock()
+            delete(m.activeRuns, runID)
+            m.mu.Unlock()
+            close(run.done)
+        }()
+
+        runner := NewRunner(cfg)
+        report, err := runner.Run(runCtx)
+
+        status := store.StatusCompleted
+        if err != nil && runCtx.Err() == nil {
+            // Genuine failure — not a timeout/cancellation
+            status = store.StatusFailed
+            m.logger.Error("run failed", zap.String("run_id", runID), zap.Error(err))
+        }
+
+        // Persist final report (use background context — runCtx is cancelled)
+        if err := m.store.UpdateStatus(context.Background(), runID, status); err != nil {
+            m.logger.Error("update run status", zap.Error(err))
+        }
+        if report != nil {
+            if err := m.store.SaveReport(context.Background(), runID, report); err != nil {
+                m.logger.Error("save run report", zap.Error(err))
+            }
+        }
+    }()
+
+    return runID, nil
+}
+
+func (m *RunManager) StopRun(runID string) error {
+    m.mu.RLock()
+    run, ok := m.activeRuns[runID]
+    m.mu.RUnlock()
+
+    if !ok {
+        return store.ErrNotFound
+    }
+
+    run.cancel() // cancel the run context → workers see ctx.Done()
+    <-run.done   // wait for goroutine to acknowledge and clean up
+    return nil
+}
+
+func (m *RunManager) ActiveRunIDs() []string {
+    m.mu.RLock()
+    defer m.mu.RUnlock()
+    ids := make([]string, 0, len(m.activeRuns))
+    for id := range m.activeRuns {
+        ids = append(ids, id)
+    }
+    return ids
+}
+```
+
+---
+
+## 6. Worker Health in the Readiness Probe
+
+The orchestrator's `HealthSummary()` powers the `/readyz` endpoint:
+
+```go
+func (s *Server) readinessHandler(w http.ResponseWriter, r *http.Request) {
+    checks := map[string]any{}
+    allOK := true
+
+    // Infrastructure checks
+    if err := s.db.PingContext(r.Context()); err != nil {
+        checks["database"] = "unhealthy"
+        allOK = false
+    } else {
+        checks["database"] = "ok"
+    }
+
+    // Background worker health
+    workerHealth := s.orchestrator.HealthSummary()
+    for name, healthy := range workerHealth {
+        checks["worker:"+name] = map[string]bool{"healthy": healthy}
+        if !healthy {
+            allOK = false
+        }
+    }
+
+    status := http.StatusOK
+    if !allOK {
+        status = http.StatusServiceUnavailable
+    }
+    writeJSON(w, status, checks)
+}
+```
+
+A crashed Kafka consumer triggers `/readyz` to return 503 — Kubernetes stops routing traffic to this pod until the worker restarts and marks itself healthy.
+
+---
+
+## 7. Retry with Exponential Backoff and Jitter
+
+Background workers retrying failed operations must use jitter to prevent the **thundering herd**: all workers retrying simultaneously after a Kafka broker restarts, overwhelming it again:
+
+```go
+// internal/retry/retry.go
+package retry
+
+import (
+    "context"
+    "math/rand"
+    "time"
+)
+
+type Config struct {
+    InitialDelay time.Duration
+    MaxDelay     time.Duration
+    Multiplier   float64
+    Jitter       float64 // fraction of delay to randomize (0.0–1.0)
+    MaxAttempts  int     // 0 = unlimited
+}
+
+func Do(ctx context.Context, cfg Config, fn func() error) error {
+    delay := cfg.InitialDelay
+    for attempt := 0; ; attempt++ {
+        err := fn()
+        if err == nil {
+            return nil
+        }
+        if ctx.Err() != nil {
+            return ctx.Err()
+        }
+        if cfg.MaxAttempts > 0 && attempt >= cfg.MaxAttempts-1 {
+            return fmt.Errorf("max attempts (%d) exceeded: %w", cfg.MaxAttempts, err)
+        }
+
+        // Jitter: actual delay ∈ [delay*(1-jitter), delay*(1+jitter)]
+        jitterRange := float64(delay) * cfg.Jitter
+        actualDelay := delay + time.Duration((rand.Float64()*2-1)*jitterRange)
+
+        select {
+        case <-ctx.Done():
+            return ctx.Err()
+        case <-time.After(actualDelay):
+        }
+
+        delay = time.Duration(float64(delay) * cfg.Multiplier)
+        if delay > cfg.MaxDelay {
+            delay = cfg.MaxDelay
+        }
+    }
+}
+```
+
+Usage in the Kafka consumer worker:
+
+```go
+func (w *ConsumerWorker) Run(ctx context.Context) error {
+    return retry.Do(ctx, retry.Config{
+        InitialDelay: time.Second,
+        MaxDelay:     30 * time.Second,
+        Multiplier:   2.0,
+        Jitter:       0.3, // ±30% randomization
+        MaxAttempts:  0,   // unlimited — orchestrator controls restarts
+    }, func() error {
+        return w.consumer.connectAndConsume(ctx)
+    })
+}
+```
+
+---
+
+## 8. Rate-Limited Background Workers
+
+Some background operations must be rate-limited even in the background path to protect downstream services. The report generator shouldn't compute 50 reports simultaneously after a batch of runs complete:
+
+```go
+// internal/worker/report_generator.go
+type ReportGeneratorWorker struct {
+    runEvents <-chan string       // run IDs of completed runs
+    store     store.MetricStore
+    limiter   *rate.Limiter      // 5 reports/second max
+    logger    *zap.Logger
+}
+
+func (w *ReportGeneratorWorker) Name() string { return "report-generator" }
+
+func (w *ReportGeneratorWorker) Run(ctx context.Context) error {
+    for {
+        select {
+        case <-ctx.Done():
+            return nil
+        case runID, ok := <-w.runEvents:
+            if !ok {
+                return nil
+            }
+            // Rate limit: don't overwhelm DB with concurrent report computations
+            if err := w.limiter.Wait(ctx); err != nil {
+                return nil // context cancelled
+            }
+            go w.generateReport(ctx, runID) // async so we don't block the channel
+        }
+    }
+}
+
+func (w *ReportGeneratorWorker) generateReport(ctx context.Context, runID string) {
+    if err := retry.Do(ctx, defaultRetryConfig, func() error {
+        return w.store.ComputeAndSaveReport(ctx, runID)
+    }); err != nil {
+        w.logger.Error("report generation failed", zap.String("run_id", runID), zap.Error(err))
+    }
+}
+```
+
+---
+
+## Key Takeaways
+
+1. **`Worker` interface + `Orchestrator`** — separates the what (business logic) from the how (lifecycle, restart, health).
+2. **Restart policy is a per-worker decision**: Kafka consumer = restart-on-failure; WebSocket hub = restart-always.
+3. **Exponential backoff + jitter** prevents thundering herd after shared dependency recovery.
+4. **Run-scoped workers** have a `cancel()` function — user abort and duration timeout both route through it.
+5. **Worker health in `/readyz`** — a crashed critical worker marks the pod not-ready, stopping traffic routing.
+6. **Rate-limited background workers** protect downstream services from bursty background load.
+
+---
+
+## Production Checklist
+
+- [ ] All background goroutines managed via `Orchestrator.Register`
+- [ ] Restart policy documented for each worker
+- [ ] Exponential backoff with jitter on all retry loops
+- [ ] Worker health exposed in `/readyz`
+- [ ] Run manager `StopRun` waits for goroutine acknowledgment before returning
+- [ ] Report generator rate-limited to protect DB under burst
+- [ ] `context.Background()` used for post-cancellation cleanup (store updates after run ends)
+
+---
+
+*Next chapter: Real-Time Systems Design in Go — architecture for latency-sensitive, continuously-updating distributed backend systems.*
+
+
+---
+
+# Chapter 18 — Real-Time Systems Design in Go
+
+> **Engineering Learning Booklet | ARCHER Backend Architecture Series**
+> *Architecture and implementation patterns for latency-sensitive, continuously-updating backend systems — the engineering principles behind ARCHER's live dashboard.*
+
+---
+
+## 1. What "Real-Time" Actually Means in Backend Systems
+
+"Real-time" in backend engineering means **latency-bounded data delivery**, not instantaneous. A dashboard updating every 100ms is real-time for a user. A Kafka consumer processing within 500ms is real-time for an event pipeline. The engineering question is: **what is the acceptable end-to-end latency budget, and which architectural decisions keep you within it?**
+
+For ARCHER's live dashboard:
+
+```
+Event occurrence (worker result)
+    ↓  < 5ms     Worker result → MetricAccumulator (in-process channel)
+    ↓  < 10ms    MetricAccumulator → Snapshot (periodic, 1s ticker)
+    ↓  < 100ms   Snapshot → Kafka (batched, network)
+    ↓  < 500ms   Kafka → Consumer (fetch latency)
+    ↓  < 50ms    Consumer → DB (batch write)
+    ─────────────────────────────────────────────
+    Total (DB path): < 665ms
+
+    ↓  < 10ms    Snapshot → WebSocket broadcast (in-process channel)
+    ↓  < 50ms    WebSocket → Browser (TCP + JS render)
+    ─────────────────────────────────────────────
+    Total (WS path): < 70ms
+```
+
+The WebSocket path is the real-time path. The Kafka-to-DB path is the durable path. They are independent — a slow DB write does not delay dashboard updates.
+
+---
+
+## 2. The Event Sourcing Mental Model
+
+ARCHER's telemetry system is an event-sourced system:
+
+```
+Events (immutable): MetricEvent{runID, workerID, latency, statusCode, timestamp}
+State (derived):    RunSnapshot{p95, rps, errorRate, ...}
+```
+
+The canonical event log is Kafka. The derived state (snapshots, percentiles, reports) is computed from the log. If the DB is corrupted, you replay from Kafka and recompute all state. This is the core value proposition of event sourcing in a telemetry system.
+
+This mental model has architectural implications:
+- **Writes are append-only** — never update a metric event; add a new one
+- **State is computed, not stored directly** — the DB stores pre-computed snapshots for query efficiency
+- **Replay is possible** — Kafka retention window (7 days) defines the replay horizon
+- **Consumer groups are stateless** — they can be scaled out without coordination
+
+---
+
+## 3. Latency Optimization — The Real-Time Pipeline
+
+### 3.1 Eliminate Synchronous DB Writes from the Critical Path
+
+The most common real-time performance mistake: writing to the DB on every event.
+
+```
+BAD: Worker result → DB write (10-100ms per write) → WebSocket broadcast
+GOOD: Worker result → Channel → Accumulator → WebSocket broadcast
+                                             → Batch → DB (async)
+```
+
+The WebSocket broadcast path must never touch the DB. It reads from the in-memory accumulator only.
+
+### 3.2 Fixed-Interval Tickers vs Event-Triggered Updates
+
+Two update strategies for the dashboard:
+
+**Fixed-interval (ARCHER's choice):**
+```go
+ticker := time.NewTicker(time.Second)
+for range ticker.C {
+    snapshot := accumulator.Snapshot()
+    hub.Broadcast(runID, encodeSnapshot(snapshot))
+}
+```
+
+- Predictable client update rate — dashboard updates at known intervals
+- Amortizes encoding overhead — 1 JSON encode per second regardless of event rate
+- Simple to reason about — no event accumulation logic
+
+**Event-triggered with debounce:**
+```go
+// Broadcast at most once per 200ms regardless of event rate
+func debounce(ctx context.Context, fn func(), interval time.Duration) func() {
+    var mu sync.Mutex
+    var timer *time.Timer
+    return func() {
+        mu.Lock()
+        defer mu.Unlock()
+        if timer != nil {
+            timer.Reset(interval)
+            return
+        }
+        timer = time.AfterFunc(interval, func() {
+            mu.Lock()
+            timer = nil
+            mu.Unlock()
+            fn()
+        })
+    }
+}
+
+broadcast := debounce(ctx, func() {
+    hub.Broadcast(runID, encodeSnapshot(accumulator.Snapshot()))
+}, 200*time.Millisecond)
+
+// Called by the accumulator on every event
+collector.OnEvent = func(r Result) {
+    accumulator.Record(r)
+    broadcast() // debounced — fires at most 5×/second
+}
+```
+
+For ARCHER, the fixed 1-second ticker is correct. The load generator produces thousands of events per second — debouncing each is unnecessary complexity. The ticker amortizes the cost correctly.
+
+---
+
+## 4. The Real-Time Dashboard Data Contract
+
+The browser dashboard needs specific data layout for efficient rendering. Design the wire format for the dashboard's requirements, not for the DB schema:
+
+```go
+// DashboardSnapshot — optimized for real-time chart rendering
+type DashboardSnapshot struct {
+    RunID     string    `json:"run_id"`
+    Timestamp time.Time `json:"ts"`
+
+    // Time-series point (for line chart)
+    Current struct {
+        RPS       float64       `json:"rps"`
+        P50Ms     float64       `json:"p50_ms"`
+        P95Ms     float64       `json:"p95_ms"`
+        P99Ms     float64       `json:"p99_ms"`
+        ErrorRate float64       `json:"error_rate"`
+    } `json:"current"`
+
+    // Cumulative (for summary cards)
+    Cumulative struct {
+        TotalRequests int64         `json:"total_requests"`
+        TotalErrors   int64         `json:"total_errors"`
+        Duration      time.Duration `json:"duration_ms"`
+    } `json:"cumulative"`
+
+    // Workers (for worker health panel)
+    Workers struct {
+        Active  int            `json:"active"`
+        ByID    map[string]int `json:"by_id"` // workerID → request count this window
+    } `json:"workers"`
+
+    // Status distribution (for pie chart)
+    StatusCodes map[string]int64 `json:"status_codes"` // "2xx", "4xx", "5xx"
+
+    // Run state
+    State RunState `json:"state"` // running, completed, failed, stopping
+}
+```
+
+The browser reads `current.p95_ms` directly for the chart — no client-side computation. The JSON is typed for direct mapping to chart library data structures.
+
+---
+
+## 5. Backpressure in Real-Time Systems
+
+Real-time systems face a unique backpressure challenge: dropping data is sometimes correct.
+
+```
+Dashboard client connected on a slow mobile connection:
+  Server sends 1 snapshot/second (1-5 KB JSON each)
+  Client processes 0.5 snapshot/second (buffer fills after 10s)
+
+Options:
+1. Block broadcast — hub goroutine stalls waiting for slow client → all other clients lag
+2. Drop for slow client — disconnect slow client; others unaffected
+3. Aggregate — merge missed snapshots → send one summary (complex)
+```
+
+ARCHER uses option 2 (from Chapter 10): the hub's broadcast arm uses a non-blocking send. If a client's send buffer is full, it's disconnected. The client reconnects and receives fresh data immediately. This is the correct tradeoff — one slow browser tab must not degrade the dashboard for all other clients.
+
+```go
+// In hub.Run() broadcast arm:
+case msg := <-h.broadcast:
+    for client := range runClients {
+        select {
+        case client.send <- msg.Payload:
+        default:
+            // Slow client — drop and disconnect
+            delete(runClients, client)
+            close(client.send) // causes writePump to exit and close connection
+        }
+    }
+```
+
+---
+
+## 6. Reconnection and State Recovery
+
+WebSocket connections break. Network partitions, pod restarts, and browser sleep all disconnect clients. The dashboard must recover gracefully:
+
+### 6.1 Server-Side: Send Current State on Connect
+
+When a new client connects, immediately send the current snapshot — don't make them wait for the next tick:
+
+```go
+func (h *Hub) ServeClientForRun(ctx context.Context, conn *websocket.Conn, runID string) {
+    client := h.registerClient(ctx, conn, runID)
+
+    // Send current state immediately on connect
+    if snap := h.accumulator.Snapshot(runID); snap != nil {
+        payload, _ := json.Marshal(snap)
+        select {
+        case client.send <- payload:
+        default:
+        }
+    }
+
+    // Start pumps
+    go client.writePump(ctx)
+    client.readPump(h)
+}
+```
+
+Without this, a reconnecting client sees a blank dashboard for up to 1 second.
+
+### 6.2 Client-Side: Exponential Backoff Reconnect
+
+The browser WebSocket client must reconnect with backoff (conceptual — implemented in JavaScript, but your Go server must handle rapid reconnects):
+
+```
+connect → connected
+  ↓ disconnect
+  wait 1s → reconnect → connected
+  ↓ disconnect
+  wait 2s → reconnect → connected
+  ↓ disconnect
+  wait 4s → ... → max 30s
+```
+
+Your Go server must handle reconnection correctly:
+- Accept the new WebSocket connection without state from the previous connection
+- Re-register the client with the hub under the same `runID`
+- Send the current snapshot immediately
+- Old client connection is already cleaned up via the read pump's `unregister` path
+
+---
+
+## 7. Real-Time Metrics — P99 in a Sliding Window
+
+For real-time display, the cumulative P99 since run start is misleading after the first few seconds — it reflects the entire run history, not recent behavior. Use the 30-second sliding window from Chapter 13:
+
+```go
+// Live dashboard shows sliding window percentiles — more actionable than cumulative
+func (c *EventCollector) buildDashboardSnapshot(runID string) DashboardSnapshot {
+    windowSnap := c.window.Snapshot()   // 30s sliding window percentiles
+    cumSnap    := c.buildSnapshot()     // cumulative since run start
+
+    return DashboardSnapshot{
+        RunID:     runID,
+        Timestamp: time.Now(),
+        Current: struct{ RPS, P50Ms, P95Ms, P99Ms, ErrorRate float64 }{
+            RPS:       windowSnap.RequestsPerSec,
+            P50Ms:     float64(windowSnap.P50) / float64(time.Millisecond),
+            P95Ms:     float64(windowSnap.P95) / float64(time.Millisecond),
+            P99Ms:     float64(windowSnap.P99) / float64(time.Millisecond),
+            ErrorRate: float64(windowSnap.Errors) / float64(max(windowSnap.Total, 1)),
+        },
+        Cumulative: struct{ TotalRequests, TotalErrors int64; Duration time.Duration }{
+            TotalRequests: cumSnap.TotalRequests,
+            TotalErrors:   cumSnap.ErrorCount,
+        },
+    }
+}
+```
+
+---
+
+## 8. Real-Time Alert Detection
+
+The ARCHER system should detect threshold breaches in real-time and push alerts to the dashboard:
+
+```go
+// internal/alerting/detector.go
+type ThresholdAlert struct {
+    Type      string    `json:"type"`      // "error_rate", "p99_latency"
+    Message   string    `json:"message"`
+    Value     float64   `json:"value"`
+    Threshold float64   `json:"threshold"`
+    Severity  string    `json:"severity"`  // "warning", "critical"
+    Timestamp time.Time `json:"ts"`
+}
+
+type AlertDetector struct {
+    thresholds AlertThresholds
+    hub        *websocket.Hub
+    logger     *zap.Logger
+    // Track alert state to avoid repeated alerts for the same condition
+    lastAlerts map[string]time.Time
+    mu         sync.Mutex
+}
+
+func (d *AlertDetector) Evaluate(runID string, snap Snapshot) {
+    d.checkErrorRate(runID, snap)
+    d.checkLatency(runID, snap)
+}
+
+func (d *AlertDetector) checkErrorRate(runID string, snap Snapshot) {
+    if snap.ErrorRate < d.thresholds.ErrorRateWarning {
+        return
+    }
+    severity := "warning"
+    if snap.ErrorRate >= d.thresholds.ErrorRateCritical {
+        severity = "critical"
+    }
+
+    d.mu.Lock()
+    lastAlert := d.lastAlerts["error_rate:"+runID]
+    d.mu.Unlock()
+
+    // Don't repeat alert within 30s
+    if time.Since(lastAlert) < 30*time.Second {
+        return
+    }
+
+    alert := ThresholdAlert{
+        Type:      "error_rate",
+        Message:   fmt.Sprintf("Error rate %.1f%% exceeds threshold %.1f%%", snap.ErrorRate*100, d.thresholds.ErrorRateWarning*100),
+        Value:     snap.ErrorRate,
+        Threshold: d.thresholds.ErrorRateWarning,
+        Severity:  severity,
+        Timestamp: time.Now(),
+    }
+
+    payload, _ := json.Marshal(map[string]any{"type": "alert", "data": alert})
+    d.hub.Broadcast(runID, payload)
+
+    d.mu.Lock()
+    d.lastAlerts["error_rate:"+runID] = time.Now()
+    d.mu.Unlock()
+
+    d.logger.Warn("alert fired",
+        zap.String("run_id", runID),
+        zap.String("type", alert.Type),
+        zap.String("severity", severity),
+        zap.Float64("value", snap.ErrorRate),
+    )
+}
+```
+
+The alert fires in-process (no external call), through the WebSocket hub (zero additional latency), and is deduplicated (no alert storm). The browser receives a distinct message type `"alert"` and renders a notification without polling.
+
+---
+
+## 9. Architectural Properties of Real-Time Systems
+
+| Property | ARCHER Implementation |
+|---|---|
+| **Low write latency** | Worker results → buffered channel → no blocking |
+| **Low read latency** | WebSocket broadcast from in-memory snapshot |
+| **Backpressure isolation** | Slow WebSocket clients disconnected; don't affect pipeline |
+| **State recovery** | New client receives current snapshot immediately on connect |
+| **Durability independence** | DB write latency doesn't affect dashboard update frequency |
+| **Alert delivery** | In-process; no external round-trip |
+| **Sliding window accuracy** | 30s window prevents stale cumulative stats dominating display |
+| **Event sourcing** | Kafka replay enables recomputing any derived state |
+
+---
+
+## Key Takeaways
+
+1. **Separate the real-time path from the durable path** — DB write latency must never affect WebSocket latency.
+2. **Fixed-interval tickers amortize encoding cost** — one JSON encode per second at 50k events/s.
+3. **Drop slow WebSocket clients** — one slow browser must not stall the hub goroutine.
+4. **Send current state on reconnect** — don't make recovering clients wait for the next tick.
+5. **Sliding window percentiles are more actionable** than cumulative stats for live dashboards.
+6. **In-process alert detection** through the WebSocket hub has zero additional latency.
+7. **Event sourcing from Kafka** enables stateless consumers and arbitrary state replay.
+
+---
+
+## Production Checklist
+
+- [ ] WebSocket broadcast path reads from in-memory accumulator only — no DB calls
+- [ ] Hub broadcasts via fixed-interval ticker (1s) — not per-event
+- [ ] Slow client disconnected on buffer full — non-blocking send with `default`
+- [ ] Current snapshot sent immediately on new WebSocket connection
+- [ ] Sliding window (30s) used for dashboard percentile display
+- [ ] Alert deduplication prevents storm (30s suppression window per alert type)
+- [ ] Kafka path and WebSocket path are independent — DB slowness doesn't delay dashboard
+- [ ] `DashboardSnapshot` type designed for direct browser chart library consumption
+
+---
+
+*Next chapter: How the Complete ARCHER Backend Architecture Fits Together — synthesizing all 18 chapters into the full system view.*
+
+
+---
+
+# Chapter 19 — How the Complete ARCHER Backend Architecture Fits Together
+
+> **Engineering Learning Booklet | ARCHER Backend Architecture Series**
+> *Synthesizing all 18 chapters into the complete system view — data flows, concurrency interactions, deployment topology, and the engineering decisions that connect every component.*
+
+---
+
+## 1. ARCHER in One Sentence
+
+ARCHER (Adaptive Real-time Concurrent HTTP-Engine and Router) is a distributed load benchmarking platform that:
+- **Generates** controlled concurrent HTTP load against target systems
+- **Collects** per-request telemetry from workers in real time
+- **Persists** events durably via Kafka to TimescaleDB
+- **Broadcasts** live metrics to dashboard clients via WebSocket
+- **Exposes** a REST API for run management and historical queries
+- **Operates** as multiple independently deployable Go binaries in Kubernetes
+
+Every design decision in the previous 18 chapters exists to make one of these five functions correct, scalable, and operable.
+
+---
+
+## 2. The Four Binaries
+
+```
+archer/cmd/
+├── api/        # REST API + WebSocket server (user-facing)
+├── loadgen/    # Load generator (runs inside Kubernetes Jobs or long-lived Deployments)
+├── agent/      # Telemetry consumer (Kafka → TimescaleDB)
+└── worker/     # (Optional) standalone worker orchestrator for complex run topologies
+```
+
+Each binary is independently deployable. The `api` can be scaled horizontally for read traffic. The `agent` is scaled to match Kafka partition count. The `loadgen` is launched as a Kubernetes Job per benchmark run. They communicate **only** through Kafka and the database — not by direct API calls.
+
+---
+
+## 3. Complete Data Flow — A Single Load Test Run
+
+```
+USER ACTION: POST /api/v1/runs
+    │
+    ▼
+[archer-api]
+  RunHandler.CreateRun()
+    ├── Validate RunConfig
+    ├── runStore.Create(ctx, run)               → PostgreSQL: runs table
+    ├── kafkaProducer.Publish("archer.runs",    → Kafka: run created event
+    │       RunEvent{type: "created", runID})
+    └── Respond 201 with runID
+    │
+    ▼  (run goroutine spawned with context.Background() + run duration timeout)
+[archer-api: RunManager.StartRun()]
+    │
+    ▼
+[archer-loadgen: Runner.Run()]
+    ├── NewPool(concurrency=50)
+    ├── pool.Start(runCtx)           → 50 worker goroutines
+    ├── KafkaEmitter.Run(runCtx)     → batching goroutine
+    ├── telemetry.Pipeline.Run(runCtx)
+    │       ├── EventCollector.Run()   → owns MetricAccumulator state
+    │       └── MetricBroadcaster.Run() → WebSocket snapshots every 1s
+    │
+    │  [WORKER GOROUTINES × 50]
+    │  for each goroutine:
+    │    rate.Limiter.Wait(ctx)
+    │    HTTPJob.Execute(ctx) → http.Client.Do(request)
+    │    EventCollector.Collect(result) → buffered channel
+    │
+    ▼
+[archer-loadgen: EventCollector — single goroutine]
+    ├── Accumulates results in-memory
+    ├── Every 1s → Snapshot → MetricBroadcaster
+    │                      → KafkaEmitter.Emit()
+    │
+    ▼  (two paths diverge here)
+
+PATH A: WebSocket (real-time, <70ms end-to-end)
+    KafkaEmitter buffers events (non-blocking, drops on full)
+    MetricBroadcaster → hub.Broadcast(runID, payload)
+    WebSocket Hub goroutine → client.send channels (50 dashboard clients)
+    Browser receives JSON snapshot → renders chart
+    
+PATH B: Kafka → DB (durable, <665ms end-to-end)
+    KafkaEmitter → kafka.Writer.WriteMessages() (batched, every 100ms or 500 events)
+    Kafka Broker: archer.metrics (6 partitions, keyed by runID)
+    ↓
+[archer-agent: ConsumerPipeline]
+    kafka.Reader.ReadMessage() → msgCh
+    Worker goroutines (3) drain msgCh → batch accumulate
+    Every 500ms or 100 events → store.SaveBatch() → TimescaleDB
+
+    │
+    ▼
+USER ACTION: GET /api/v1/runs/{id}/metrics
+    runStore.Get() → PostgreSQL
+    store.GetLatestSnapshot() → TimescaleDB (singleflight deduplicated)
+    → JSON response
+```
+
+---
+
+## 4. Concurrency Topology Map
+
+Every component's goroutine count and ownership:
+
+```
+archer-api process:
+  1  main goroutine (blocks on server.Run)
+  1  HTTP server goroutine (net/http accept loop)
+  N  HTTP request handler goroutines (one per concurrent request)
+  1  WebSocket Hub goroutine (owns clients map)
+  2M WebSocket client goroutines (2 per connected client: readPump + writePump)
+  1  Kafka consumer goroutine (via Orchestrator)
+  1  Telemetry pipeline goroutine
+  1  pprof HTTP server goroutine
+  ─────────────────────────────────────
+  Total: ~(6 + N + 2M) goroutines
+
+archer-loadgen process (during active run):
+  1  main goroutine
+  C  worker goroutines (C = configured concurrency, e.g. 50)
+  1  EventCollector goroutine (owns accumulator)
+  1  KafkaEmitter goroutine (batching and publishing)
+  1  MetricBroadcaster goroutine (WS snapshot ticker)
+  1  Rate limiter goroutine (if RatePerSec > 0)
+  ─────────────────────────────────────
+  Total: ~(C + 5) goroutines = ~55 at concurrency=50
+
+archer-agent process:
+  1  main goroutine
+  1  Kafka reader goroutine (single reader, sequential)
+  W  Consumer worker goroutines (W = worker count, e.g. 3)
+  1  Orchestrator goroutine
+  ─────────────────────────────────────
+  Total: ~(W + 3) goroutines
+```
+
+---
+
+## 5. Channel Ownership Map
+
+Every channel in the system, who writes to it, and who reads from it:
+
+```
+archer-loadgen:
+  jobCh        chan Job        ← RunManager feeder goroutine
+                               → worker goroutines (50)
+
+  resultCh     chan Result     ← worker goroutines (50)
+                               → EventCollector goroutine
+
+  snapshotCh   chan Snapshot   ← EventCollector goroutine
+                               → Pipeline goroutine
+
+  emitCh       chan MetricEvent ← Pipeline goroutine
+                                → KafkaEmitter goroutine
+
+archer-api WebSocket Hub:
+  register     chan *Client    ← wsHandler goroutines (one per upgrade)
+                               → Hub.Run goroutine
+
+  unregister   chan *Client    ← readPump goroutines
+                               → Hub.Run goroutine
+
+  broadcast    chan BroadcastMsg ← MetricBroadcaster goroutine
+                                  ← AlertDetector (on threshold breach)
+                                → Hub.Run goroutine
+
+  client.send  chan []byte     ← Hub.Run goroutine (broadcast arm)
+                               → writePump goroutine (one per client)
+
+archer-agent:
+  msgCh        chan kafka.Message ← Kafka reader goroutine
+                                  → Consumer worker goroutines (3)
+```
+
+---
+
+## 6. Error Propagation Map
+
+How errors flow and where they are handled:
+
+```
+Worker HTTP error (4xx/5xx):
+  → Result{Err: UpstreamError{StatusCode: 429}}
+  → EventCollector.Collect() → accumulated as error count
+  → Prometheus counter incremented
+  → Dashboard shows error rate
+  → (No retry — benchmark wants to measure real failure rate)
+
+Worker context cancelled (run ended or SIGTERM):
+  → HTTPJob.Execute() returns Result{Err: context.Canceled}
+  → EventCollector.Collect() called with canceled result
+  → Workers exit select loop on ctx.Done()
+  → WaitGroup completes → close(resultCh) → EventCollector exits
+  → Pipeline performs final flush
+  → Final snapshot broadcast
+
+Kafka publish failure (transient):
+  → KafkaEmitter logs error + increments counter
+  → Continues — telemetry loss accepted
+  → kafka-go retries internally (MaxAttempts: 3)
+
+Kafka read failure in agent (transient):
+  → ConsumerWorker.Run() returns error
+  → Orchestrator: RestartOnFailure policy
+  → Exponential backoff (1s → 2s → 4s → ... → 30s)
+  → Reconnects and resumes from last committed offset
+
+DB write failure in agent:
+  → store.SaveBatch() returns error
+  → Batch logged and discarded (telemetry loss)
+  → Prometheus error counter incremented
+  → Alert if error rate exceeds threshold
+
+HTTP server panic:
+  → Recover middleware catches
+  → Logs panic + stack trace
+  → Returns 500 to client
+  → Server continues — does not crash
+```
+
+---
+
+## 7. Kafka Event Flow
+
+```
+Topics and their producers/consumers:
+
+archer.metrics (6 partitions, keyed by runID):
+  Producers:  archer-loadgen (KafkaEmitter, one per active run)
+  Consumers:  archer-agent consumer group (3 replicas, 2 partitions each)
+  Retention:  7 days
+  Schema:     MetricEvent{runID, workerID, latency, statusCode, timestamp}
+
+archer.runs (2 partitions, keyed by runID):
+  Producers:  archer-api (RunHandler.CreateRun, RunManager.StopRun)
+  Consumers:  archer-api (RunEventConsumer — drives report generation)
+              archer-loadgen (RunEventConsumer — receives abort signals)
+  Retention:  30 days
+  Schema:     RunEvent{type, runID, config, timestamp}
+
+archer.metrics.dlq (1 partition):
+  Producers:  archer-agent (DLQProducer — unparseable messages)
+  Consumers:  Manual inspection / ops tooling
+  Retention:  30 days
+```
+
+---
+
+## 8. Deployment Topology
+
+```
+Kubernetes Cluster:
+┌────────────────────────────────────────────────────────────────┐
+│ Namespace: archer                                              │
+│                                                                │
+│  Deployment: archer-api          (replicas: 3)                 │
+│    - REST API + WebSocket server                               │
+│    - Sticky sessions for WebSocket (sessionAffinity: ClientIP) │
+│    - HPA: scale on CPU > 70%                                   │
+│    - Resources: 2 CPU, 512Mi memory                            │
+│    - /readyz checks: DB ping + Kafka ping + worker health      │
+│                                                                │
+│  Deployment: archer-agent        (replicas: 3)                 │
+│    - Kafka consumer → TimescaleDB                              │
+│    - Replicas must equal kafka partition count / N workers     │
+│    - Resources: 1 CPU, 256Mi memory                            │
+│    - /readyz checks: Kafka connectivity + DB connectivity      │
+│                                                                │
+│  Job: archer-loadgen-{runID}     (one per benchmark run)       │
+│    - Created by API on POST /runs                              │
+│    - Deleted on completion or TTL (24h)                        │
+│    - Resources: 2 CPU, 512Mi memory                            │
+│    - No readiness probe — it's a Job, not a Service            │
+│                                                                │
+│  StatefulSet: kafka              (replicas: 3)                 │
+│  StatefulSet: timescaledb        (replicas: 1 + 1 replica)     │
+│                                                                │
+│  Service: archer-api-svc         (ClusterIP + Ingress)         │
+│  Service: kafka-svc              (headless for broker DNS)     │
+│  Service: db-svc                 (ClusterIP)                   │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 9. Graceful Shutdown — The Complete Flow
+
+When Kubernetes sends SIGTERM to `archer-api`:
+
+```
+t=0s    SIGTERM received
+        signal.NotifyContext cancels root ctx
+
+t=0-5s  preStop sleep: endpoint removed from load balancer
+        New connections redirected to other pods
+        In-flight requests still accepted
+
+t=5s    server.Shutdown(20s) called
+        HTTP: stop Accept(); complete in-flight handlers
+        WebSocket: Hub.Run ctx cancelled → sends CloseGoingAway to all clients
+        Orchestrator ctx cancelled → all workers see ctx.Done()
+
+t=5-15s Workers drain:
+        - Kafka consumer commits final offsets, closes reader
+        - Telemetry pipeline performs final flush to Kafka
+        - WebSocket hub closes all client channels
+
+t=15s   runner.Wait() returns — all goroutines exited
+
+t=15-18s Infrastructure shutdown (in order):
+        kafkaProducer.Close() → flushes pending batch
+        kafkaConsumer.Close() → commits offsets
+        db.Close()            → releases connection pool
+
+t=18s   logger.Sync() → flushes buffered log writes
+        verifyCleanShutdown() → runtime.NumGoroutine() should be ~3
+
+t=19s   os.Exit(0)
+
+t=40s   Kubernetes SIGKILL deadline (never reached)
+```
+
+---
+
+## 10. Observability Strategy
+
+```
+Layer               Tool              What It Measures
+──────────────────────────────────────────────────────────────────
+Application metrics  Prometheus        RPS, latency histograms, error rates,
+                                       worker pool depth, Kafka lag, goroutine count
+
+Structured logs      Zap → Loki        Request/response logs, error details,
+                                       run lifecycle events, backoff events
+
+Distributed tracing  OpenTelemetry     (Future) Cross-service trace correlation
+                     → Jaeger          for debugging slow runs
+
+Runtime profiling    pprof             Goroutine stacks, heap allocations,
+                     (internal port)   mutex contention, CPU hotspots
+
+Kafka monitoring     Kafka Exporter    Consumer group lag, partition offset,
+                     → Prometheus      broker health, topic throughput
+
+DB monitoring        pg_stat_statements Query latency, connection pool saturation,
+                     → Prometheus      slow query detection
+
+Dashboard            Grafana           All of the above in unified panels
+```
+
+The Grafana dashboard for ARCHER has panels:
+1. **Benchmark Live View** — P50/P95/P99 from WebSocket (proxied by API)
+2. **Pipeline Health** — Kafka consumer lag, DB write latency, emitter drop rate
+3. **System Resources** — CPU, memory, goroutine count per pod
+4. **Error Analysis** — error rate by status code, DLQ message rate
+5. **Run History** — timeline of all runs with completion status
+
+---
+
+## 11. The API Contract (Summary)
+
+```
+REST API:
+  POST   /api/v1/runs                    Create and start a load test run
+  GET    /api/v1/runs                    List runs (filter by status)
+  GET    /api/v1/runs/{id}               Get run details and status
+  DELETE /api/v1/runs/{id}              Stop a running run
+  GET    /api/v1/runs/{id}/metrics       Latest snapshot (DB-backed)
+  GET    /api/v1/runs/{id}/percentiles   Full percentile report
+
+WebSocket:
+  GET    /api/v1/runs/{id}/ws            Live metric stream for a run
+
+Operational:
+  GET    /healthz                        Liveness probe
+  GET    /readyz                         Readiness probe
+  GET    /metrics                        Prometheus scrape endpoint
+  PUT    /admin/log-level               Dynamic log level change
+  GET    /debug/pprof/*                  Go runtime profiling (internal only)
+```
+
+---
+
+## 12. What Each Chapter Built
+
+| Chapter | Component in ARCHER |
+|---|---|
+| 01 | Mental model for goroutine/channel/binary design |
+| 02 | `cmd/`, `internal/`, `pkg/` layout; DI in `main()` |
+| 03 | `MetricStore` interface, `Job` interface, decorator pattern |
+| 04 | `writeStoreError`, error classification in consumer loop |
+| 05 | `GOMAXPROCS` via `automaxprocs`; supervisor pattern in Orchestrator |
+| 06 | Channel topology: Hub channels, pipeline channels, fan-out/fan-in |
+| 07 | `Pool` struct; `Runner` with rate limiter; metric accumulator |
+| 08 | Context hierarchy (run → worker → request); graceful shutdown |
+| 09 | REST API server with middleware chain, `/healthz`, `/readyz` |
+| 10 | WebSocket Hub; read/write pumps; ping/pong; run-scoped broadcast |
+| 11 | Kafka producer (batched); consumer with DLQ; at-least-once |
+| 12 | Multi-stage Dockerfile; `GOMEMLIMIT`; preStop; K8s probes |
+| 13 | EventCollector (single-goroutine); dual-path pipeline; sliding window |
+| 14 | Zap structured logging; three-source config; atomic log level |
+| 15 | Five-phase lifecycle; `Runner`; shutdown timeout budget |
+| 16 | `errgroup`; `singleflight`; `atomic.Pointer`; backpressure pipeline |
+| 17 | `Worker` interface; `Orchestrator`; retry with jitter; `RunManager` |
+| 18 | Real-time latency budget; event sourcing; backpressure isolation |
+
+---
+
+## Key Takeaways
+
+1. **ARCHER's architecture is a direct application of Go's design principles** — every pattern in the language is used purposefully.
+2. **The separation of real-time path (WebSocket) from durable path (Kafka→DB)** is the central architectural decision — they are independent failure domains.
+3. **Every goroutine is owned and tracked** — nothing runs without a documented exit condition and a `sync.WaitGroup` entry.
+4. **Context is the nervous system** — it connects shutdown signals from `main()` to every network call in the system.
+5. **The four binaries are independently scalable** — the system scales by adding agent replicas, not by making a monolith bigger.
+6. **Observability is not an afterthought** — every component has Prometheus metrics, structured logs, and pprof access.
+
+---
+
+*Final chapter: Production Engineering Mindset for Distributed Systems — how to think, debug, and operate at scale.*
+
+
+---
+
+# Chapter 20 — Production Engineering Mindset for Distributed Systems
+
+> **Engineering Learning Booklet | ARCHER Backend Architecture Series**
+> *How strong backend engineers think, debug, operate, and make decisions under pressure — the mindset that separates working systems from reliable ones.*
+
+---
+
+## 1. The Mindset Is the Skill
+
+Every technical pattern in the previous 19 chapters is learnable. What separates engineers who build systems that stay up from those who build systems that work in demos is not knowledge of any specific API — it is a way of thinking about systems that becomes instinctive over time.
+
+This chapter is about that way of thinking. It will not introduce new Go code. It will challenge you to internalize the reasoning behind every decision you've seen so far, so that you can make new decisions correctly when you encounter situations this curriculum didn't anticipate.
+
+---
+
+## 2. Think in Failure Modes First
+
+Every system design decision should begin with: **what happens when this fails?**
+
+Not "will this fail" — everything fails. The questions are:
+- **How does it fail?** (silently, loudly, with data loss, with partial writes)
+- **Who is affected?** (one user, all users, only telemetry)
+- **Can it recover automatically?** (retry, reconnect, replay)
+- **What is the data loss window?** (zero, milliseconds, seconds)
+
+Apply this to every ARCHER component:
+
+| Component | Failure Mode | Automatic Recovery | Data Loss |
+|---|---|---|---|
+| Load generator worker | HTTP timeout | Yes — next job starts | None |
+| Kafka emitter buffer full | Drop event | Yes — drops silently | Metric event lost |
+| Kafka broker unreachable | Consumer stops | Yes — reconnect with backoff | Events buffered in Kafka |
+| DB write failure | Batch discarded | Partial — retry on next batch | Metric snapshot lost |
+| WebSocket client disconnect | Client disconnects | Yes — client reconnects | Missed snapshots |
+| API pod SIGTERM | Pod drains | Yes — other pods serve traffic | None (if drain works) |
+| Full pod crash (OOM) | SIGKILL — no drain | Yes — Kubernetes restarts | In-flight requests lost |
+
+When you can answer this table for your system from memory, you understand your system.
+
+---
+
+## 3. The Three Questions Before Any Change
+
+Before adding a feature, optimizing a path, or changing a configuration:
+
+**1. What is the measured problem?**
+Not "I think the latency is high" — show the pprof flamegraph, the Prometheus histogram, the p99 from Grafana. If you cannot point to a measurement, you are solving an imaginary problem. Premature optimization is the most common form of wasted engineering time.
+
+**2. What is the failure mode of this change?**
+"If this change is wrong, what breaks and how do I know?" A change that fails silently (drops metrics with no counter) is more dangerous than one that fails loudly (panics in staging). Prefer loud failures in dev; ensure silent failures have counters in prod.
+
+**3. Can I reverse it?**
+Feature flags, config changes, and database schema changes have different reversibility profiles. A config change is reversible in seconds. A non-backwards-compatible schema migration is reversible only with a second migration. Know the reversal cost before you deploy.
+
+---
+
+## 4. Operational Simplicity Is a Feature
+
+The most underrated engineering virtue is **simplicity of operation**. A system that requires 20 manual steps to deploy, debug, or recover is a system that fails at 3am when the engineer on call is tired.
+
+**Complexity tax** — every piece of complexity you add is paid in:
+- Cognitive load on every future engineer
+- Time to debug under pressure
+- Surface area for subtle failure modes
+- Friction in onboarding new team members
+
+For ARCHER specifically:
+- Four binaries is simpler than twenty microservices
+- One Kafka topic per logical event type is simpler than per-run topics
+- One JSON config file + env override is simpler than a service mesh config system
+- `make up` starting the full stack is simpler than a 50-page runbook
+
+**Ask of every complexity you introduce**: what does this simplify for the operator? If the answer is nothing, it's debt.
+
+---
+
+## 5. The Debugging Mindset
+
+When something breaks in production, the debugging process is:
+
+### 5.1 Triage — What Changed?
+
+Before reading a single log line: **what changed recently?**
+- New deployment in the last hour?
+- Config change?
+- Traffic pattern change (spike, new client)?
+- External dependency change (Kafka version, DB schema)?
+
+80% of production incidents are caused by recent changes. Start there.
+
+### 5.2 Narrow the Blast Radius
+
+Is the problem:
+- **One user or all users?** → individual vs systemic
+- **One service or all services?** → localized vs cascading
+- **One region or all regions?** → infrastructure vs application
+- **All operations or one endpoint?** → specific handler vs general failure
+
+The answer determines where you look first.
+
+### 5.3 Follow the Data
+
+In a distributed system, follow the event through each stage:
+
+```
+User reports: "Dashboard not updating during run"
+
+1. Is the load generator running?
+   → Check archer-loadgen pod logs: is it submitting jobs?
+   → Check Prometheus: archer_pool_active_workers > 0?
+
+2. Are events reaching Kafka?
+   → Check Kafka consumer lag: is archer.metrics lag growing?
+   → Check KafkaEmitter drop counter: events being dropped?
+
+3. Is the consumer processing?
+   → Check archer-agent logs: any errors?
+   → Check DB: new rows in metrics table for this run_id?
+
+4. Is the WebSocket broadcasting?
+   → Check archer-api logs: any WebSocket disconnect errors?
+   → Check Prometheus: websocket_clients_connected > 0 for this run?
+
+5. Is the browser receiving?
+   → Open browser DevTools → Network → WS → check frames
+```
+
+This is the "follow the data" approach: trace the event from source to sink, checking each stage until the break is found.
+
+### 5.4 The 5-Minute Rule
+
+If you haven't formed a hypothesis within 5 minutes of looking at logs, step back. You are reading without a mental model. Ask:
+- What should I be seeing that I'm not seeing?
+- What am I seeing that shouldn't be there?
+- What is the simplest explanation that fits all the evidence?
+
+Form a hypothesis first. Then look for evidence that disproves it.
+
+---
+
+## 6. Scalability Reasoning — Think in Orders of Magnitude
+
+When evaluating an architectural decision, reason through orders of magnitude:
+
+**Current scale**: 50 concurrent workers, 1 run at a time, 1 dashboard client.
+**10× scale**: 500 workers, 10 concurrent runs, 50 dashboard clients.
+**100× scale**: 5000 workers, 100 concurrent runs, 500 dashboard clients.
+
+For each jump, identify what breaks:
+
+| Component | Breaks at 10× | Solution |
+|---|---|---|
+| Single Kafka partition | Partition becomes throughput bottleneck | Increase to 60 partitions |
+| Single `archer-agent` | Cannot consume all partitions | Scale to 10 replicas |
+| WebSocket Hub (one process) | Memory: 500 clients × 2 goroutines × 2KB = 2MB | Fine — scale to 5000 easily |
+| `singleflight` on metrics | More clients → more deduplication benefit | Already handled |
+| `archer-api` single process | CPU saturation on JSON encoding | Scale horizontally (HPA) |
+| TimescaleDB single node | Write throughput | Hypertable partitioning + read replica |
+
+Identifying the bottleneck for each order of magnitude tells you what not to optimize yet. A system that handles today's load well and has a clear path to 10× is the right initial design.
+
+---
+
+## 7. Production Tradeoffs — Explicit, Not Accidental
+
+Every production system makes tradeoffs. The difference between experienced engineers and novices is that experienced engineers make tradeoffs **consciously and explicitly**, while novices make them **accidentally**.
+
+ARCHER's explicit tradeoffs:
+
+| Decision | What We Chose | What We Gave Up |
+|---|---|---|
+| Kafka emitter drops on full buffer | Benchmark accuracy preserved | Some telemetry events lost |
+| At-least-once Kafka delivery | Simpler consumer logic | Potential duplicate metric events |
+| WebSocket disconnect slow clients | All clients unaffected | Slow clients lose data |
+| Fixed 1s broadcast interval | Predictable, low overhead | 1s dashboard lag |
+| In-memory accumulator (not Redis) | Zero network latency | Lost if process crashes |
+| Four binaries not one monolith | Independent scalability | More deployment complexity |
+| `FROM scratch` Docker image | Minimal attack surface | No shell for debugging |
+
+Write your tradeoffs down. Put them in the README. Review them as the system evolves — what was the right tradeoff at 1k req/s may be wrong at 1M req/s.
+
+---
+
+## 8. Build Iteratively — The Right Sequence
+
+The ARCHER build sequence for a hackathon:
+
+**Day 1: The spine**
+1. Project structure (Chapter 2 layout)
+2. Config + logger (Chapter 14)
+3. `MemoryMetricStore` implementation (Chapter 2/3)
+4. REST API skeleton with `/healthz` (Chapter 9)
+5. Verify: `curl localhost:8080/healthz` returns 200
+
+**Day 2: The load generator**
+1. `HTTPJob.Execute` (Chapter 3)
+2. `Pool` with 10 workers (Chapter 7)
+3. `EventCollector` goroutine (Chapter 13)
+4. Run a load test against a local echo server
+5. Verify: metrics accumulate correctly
+
+**Day 3: The pipeline**
+1. Kafka integration (Chapter 11) — producer + consumer
+2. `MetricBroadcaster` (Chapter 10) — WebSocket snapshots
+3. WebSocket Hub (Chapter 10)
+4. Verify: dashboard receives live updates during a run
+
+**Day 4: Production readiness**
+1. Graceful shutdown (Chapter 15)
+2. Docker builds for all binaries (Chapter 12)
+3. Docker Compose for local stack
+4. Prometheus metrics on key paths (Chapter 13)
+5. Verify: `SIGTERM` → clean drain → zero dropped requests
+
+**Day 5: Integration and hardening**
+1. Error handling audit — every `if err != nil` has a decision
+2. Context propagation audit — every I/O call uses `ctx`
+3. Goroutine leak check — `runtime.NumGoroutine()` stable under load
+4. Load test ARCHER against itself
+5. Demo rehearsal: run a 60-second test, watch live dashboard, check DB
+
+This sequence ships working software at the end of every day. Day 1 ends with a running service. Day 2 ends with working load generation. Delay is not death — a demo with Day 1–3 completed is more impressive than a half-finished Day 1–5 attempt.
+
+---
+
+## 9. The Concurrency Mental Checklist
+
+Before writing any concurrent code, answer these questions:
+
+**1. Who owns this data?**
+If multiple goroutines can reach it, you need a synchronization decision. Choose one: channel (transfer ownership), mutex (shared with lock), atomic (simple counter/flag).
+
+**2. What is the exit condition for this goroutine?**
+Write it before you write the goroutine body. If you can't answer it clearly, you have a leak.
+
+**3. What happens if this channel is full?**
+Blocking = backpressure (intentional). Non-blocking `default` = drop (intentional). If you haven't decided, it will surprise you in production.
+
+**4. Is this goroutine tied to a context?**
+If not, it will run until SIGKILL. Add `<-ctx.Done()` before you ship it.
+
+**5. Can this goroutine panic?**
+If yes and it's long-running, add `defer recover()`. The HTTP recover middleware doesn't protect goroutines you start yourself.
+
+---
+
+## 10. The Observability-First Development Loop
+
+Write code in this order: **metrics first, then logic, then tests**.
+
+```go
+// Step 1: Define what you'll observe
+var (
+    batchesFlushed = promauto.NewCounter(prometheus.CounterOpts{Name: "archer_batches_flushed_total"})
+    batchSize      = promauto.NewHistogram(prometheus.HistogramOpts{Name: "archer_batch_size", Buckets: []float64{1, 10, 50, 100, 500}})
+    flushDuration  = promauto.NewHistogram(prometheus.HistogramOpts{Name: "archer_flush_duration_seconds", Buckets: prometheus.DefBuckets})
+)
+
+// Step 2: Write the logic with instrumentation inline
+func (c *Consumer) flush(ctx context.Context, batch []Snapshot) {
+    start := time.Now()
+    defer func() {
+        flushDuration.Observe(time.Since(start).Seconds())
+        batchesFlushed.Inc()
+        batchSize.Observe(float64(len(batch)))
+    }()
+
+    if err := c.store.SaveBatch(ctx, batch); err != nil {
+        flushErrors.Inc()
+        c.logger.Error("flush failed", zap.Int("batch_size", len(batch)), zap.Error(err))
+        return
+    }
+}
+
+// Step 3: Write the test that verifies the behavior
+func TestConsumer_FlushOnTimeout(t *testing.T) {
+    // ...
+}
+```
+
+When you observe metrics from the start, you know the system is behaving correctly during development — not just at demo time. The Grafana panel that shows `archer_flush_duration_seconds` p99 during a load test is your continuous integration against your performance expectations.
+
+---
+
+## 11. What Strong Engineers Do Differently
+
+**They read the error, not just the presence of error.**
+`if err != nil { return err }` is not error handling — it is error propagation. Error handling is making a decision: retry, skip, abort, alert.
+
+**They understand what they didn't write.**
+The Go runtime, the OS scheduler, the TCP stack, the Kafka broker — these are parts of your system that you didn't write. Understanding their failure modes is part of your job.
+
+**They design for the operator, not the author.**
+The person who fixes the 3am incident may not be you. Every log message, every metric name, every config option is a message to that future person.
+
+**They distinguish between "working" and "correct".**
+A load generator that produces 50k req/s and loses 30% of its metrics is "working." Instrumentation that shows the drop rate is what makes it "correct" or at least honestly broken.
+
+**They know when to stop engineering.**
+The best architecture for a hackathon is not the best architecture for a 50-engineer company. Gold-plating a system that needs to work for 48 hours is a waste. Know your time horizon.
+
+---
+
+## 12. The ARCHER Engineering Principles (Summarized)
+
+These are the principles distilled from 20 chapters of decisions:
+
+1. **Goroutines are cheap. Use them per-request, per-connection, per-job.** Never pre-allocate thread pools. Trust the scheduler.
+
+2. **Own your state explicitly.** One goroutine owns one piece of state. All communication through channels or explicit synchronization.
+
+3. **Context is the shutdown contract.** Every I/O call, every goroutine, every ticker reads `ctx.Done()`. No exceptions.
+
+4. **Errors are decisions.** Classify every error as: transient (retry), permanent (DLQ/skip), or shutdown signal (return nil). Never swallow without a counter.
+
+5. **Interfaces at the consumption site.** Define what you need, not what you provide. Keep interfaces under 4 methods.
+
+6. **Measure before optimizing.** `go test -bench`, `go tool pprof`, Prometheus histograms. If you can't measure it, you can't improve it.
+
+7. **Instrument everything that matters.** Active workers, queue depth, error rate, flush latency, goroutine count. Metrics are documentation that updates itself.
+
+8. **Design the shutdown before the startup.** A service that shuts down cleanly is a service that can be deployed continuously. Graceful shutdown is not optional.
+
+9. **Simplicity compounds.** A simple design that works at 10× is better than a complex design that barely works now. Every abstraction you add is a tax on every future engineer.
+
+10. **The binary is the unit of deployment.** One concern per binary. Independent scale. Explicit communication via Kafka and REST.
+
+---
+
+## 13. What Comes After This Curriculum
+
+Having completed these 20 chapters, you can:
+- Understand and navigate any Go backend codebase
+- Design the ARCHER distributed benchmarking platform from scratch
+- Reason about goroutine lifecycle, channel ownership, and context propagation
+- Build production-grade Kafka producers and consumers
+- Deploy Go services in Docker and Kubernetes correctly
+- Debug production incidents with pprof, Prometheus, and structured logs
+- Make explicit architectural tradeoffs and communicate them clearly
+
+What is not in this curriculum (yet):
+- **gRPC** — inter-service RPC at high throughput (read: gRPC in Go docs + Evans CLI)
+- **OpenTelemetry** — distributed tracing across services (add after core observability works)
+- **Service mesh (Istio)** — mTLS, circuit breaking at the infrastructure layer
+- **Database schema design** — TimescaleDB hypertables, indexing, retention policies
+- **Kubernetes operator pattern** — if ARCHER needs to auto-provision load test infrastructure
+- **Go generics (advanced)** — beyond `Pool[T,R]` to constraint-based type programming
+
+Study these in the order ARCHER needs them, not in the order they are interesting.
+
+---
+
+## Key Takeaways
+
+1. **Failure mode thinking** is the most important engineering habit — what breaks, who is affected, does it recover.
+2. **Three questions before any change**: what is the measured problem, what is the failure mode, can I reverse it.
+3. **Operational simplicity is a feature** — complexity is a tax paid by every future operator.
+4. **Follow the data** in debugging — trace from source to sink until the break is found.
+5. **Explicit tradeoffs** — write down what you chose and what you gave up; review as the system scales.
+6. **Build iteratively** — ship working software at the end of every day; resist the urge to complete the full design before verifying the spine.
+7. **Observability-first development** — metrics before logic; know the system is correct, not just running.
+
+---
+
+## Final Production Checklist — The Complete ARCHER Readiness Audit
+
+### Code Quality
+- [ ] `go test -race ./...` passes with zero races
+- [ ] `go vet ./...` passes with no warnings
+- [ ] `golangci-lint run ./...` clean (at minimum: `errcheck`, `staticcheck`, `gocritic`)
+- [ ] Every goroutine has a documented exit condition
+- [ ] Every `if err != nil` has a classification (retry/skip/abort/alert)
+- [ ] All I/O functions accept `context.Context` as first parameter
+- [ ] No `time.Sleep` without `select`+`ctx.Done()`
+
+### Observability
+- [ ] `runtime.NumGoroutine()` exported as Prometheus gauge
+- [ ] Worker pool active workers and queue depth as Prometheus gauges
+- [ ] Kafka consumer lag monitored (via Kafka Exporter or manual gauge)
+- [ ] DB write latency as Prometheus histogram
+- [ ] Error rates tracked as counters with error type label
+- [ ] pprof endpoint on internal port (6060)
+
+### Deployment
+- [ ] All binaries: `CGO_ENABLED=0 GOOS=linux GOARCH=amd64`
+- [ ] `FROM scratch` final stage with CA certs
+- [ ] Version + git commit injected via `-ldflags`
+- [ ] `automaxprocs` imported in every binary
+- [ ] `GOMEMLIMIT` set to 90% of container memory limit
+- [ ] `preStop: sleep 5` in all Kubernetes pod specs
+- [ ] `terminationGracePeriodSeconds` ≥ preStop + drainTimeout + 5s
+
+### Resilience
+- [ ] Kafka consumer reconnects with exponential backoff + jitter
+- [ ] WebSocket clients reconnect on disconnect (browser-side)
+- [ ] DB connection pool sized per replica count (not per instance)
+- [ ] DLQ topic for unparseable Kafka messages
+- [ ] `/readyz` fails until all startup checks pass
+- [ ] Graceful shutdown drain verified under load (no dropped requests)
+
+### Security
+- [ ] `CheckOrigin` validates WebSocket origins against allowlist
+- [ ] Secrets in Kubernetes Secrets, not ConfigMap
+- [ ] Non-root user in all Dockerfiles
+- [ ] pprof endpoint not exposed on public port
+- [ ] `/admin/log-level` endpoint not exposed on public port
+- [ ] Request body size limited (`http.MaxBytesReader`)
+
+---
+
+## The Last Word
+
+You now have a complete engineering learning system for Go distributed backend development. Every pattern, every decision, every tradeoff in these 20 chapters was motivated by a real operational concern in real production systems.
+
+The ARCHER platform is not a toy. The load generator patterns are used in production load testing tools. The telemetry pipeline patterns are used in observability platforms. The WebSocket hub pattern is used in real-time collaboration tools. The Kafka integration patterns are used in financial event streaming systems.
+
+Build it. Break it deliberately. Observe it with the tools you've built. Fix it. That cycle — build, observe, break, fix — repeated across all 19 prior components is what makes you capable of supervising, debugging, and extending any distributed Go system you encounter.
+
+---
+
+*End of the ARCHER Backend Engineering Curriculum — 20 chapters, one complete distributed systems engineering program.*
