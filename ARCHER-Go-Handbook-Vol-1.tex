@@ -2,8 +2,7 @@
 \PassOptionsToPackage{unicode}{hyperref}
 \PassOptionsToPackage{hyphens}{url}
 %
-\documentclass[
-]{article}
+\documentclass[11pt,openany]{book}
 \usepackage{amsmath,amssymb}
 \usepackage{lmodern}
 \usepackage{iftex}
@@ -84,7 +83,6 @@
 \setlength{\emergencystretch}{3em} % prevent overfull lines
 \providecommand{\tightlist}{%
   \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
-\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
 \ifLuaTeX
   \usepackage{selnolig}  % disable illegal ligatures
 \fi
@@ -95,10 +93,167 @@
   hidelinks,
   pdfcreator={LaTeX via pandoc}}
 
+% =========================================================
+%                 BOOK STYLING
+% =========================================================
+
+\usepackage{titlesec}
+\usepackage{titling}
+\usepackage{fancyhdr}
+\usepackage{setspace}
+\usepackage{tocloft}
+\usepackage{listings}
+\usepackage{inconsolata}
+\usepackage{pagecolor}
+\usepackage{tcolorbox}
+
+% =========================================================
+%                 COLORS
+% =========================================================
+
+\definecolor{archerblue}{HTML}{0F172A}
+\definecolor{archergold}{HTML}{F59E0B}
+\definecolor{codebg}{HTML}{F5F5F5}
+
+% =========================================================
+%                 TYPOGRAPHY
+% =========================================================
+
+\renewcommand{\familydefault}{\sfdefault}
+
+\setstretch{1.12}
+
+\setlength{\parskip}{0.6em}
+\setlength{\parindent}{0pt}
+
+% =========================================================
+%                 PAGE STYLE
+% =========================================================
+
+\pagestyle{fancy}
+
+\fancyhf{}
+
+\fancyhead[L]{\textsc{ARCHER Go Engineering Handbook}}
+\fancyhead[R]{\textsc{Volume 1}}
+
+\fancyfoot[C]{\thepage}
+
+\renewcommand{\headrulewidth}{0.4pt}
+
+% =========================================================
+%                 CHAPTER STYLING
+% =========================================================
+
+\titleformat{\chapter}
+{\Huge\bfseries\color{archerblue}}
+{\thechapter}
+{1em}
+{}
+
+\titlespacing*{\chapter}{0pt}{-10pt}{25pt}
+
+\titleformat{\section}
+{\LARGE\bfseries\color{archerblue}}
+{}
+{0em}
+{}
+
+\titleformat{\subsection}
+{\Large\bfseries}
+{}
+{0em}
+{}
+
+\titleformat{\subsubsection}
+{\large\bfseries}
+{}
+{0em}
+{}
+
+% =========================================================
+%                 CODE BLOCK STYLING
+% =========================================================
+
+\lstset{
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\small,
+    frame=single,
+    breaklines=true,
+    columns=fullflexible,
+    tabsize=4,
+    showstringspaces=false
+}
+
+
 \author{}
 \date{}
 
 \begin{document}
+
+% =========================================================
+%                 TITLE PAGE
+% =========================================================
+
+\begin{titlepage}
+
+\pagecolor{archerblue}
+\color{white}
+
+\vspace*{3cm}
+
+\begin{center}
+
+{\Huge \bfseries ARCHER}
+
+\vspace{0.5cm}
+
+{\Huge Go Engineering Handbook}
+
+\vspace{1cm}
+
+{\LARGE Volume 1}
+
+\vspace{0.5cm}
+
+{\Large Foundations of Go Systems Engineering}
+
+\vspace{2cm}
+
+\rule{0.8\textwidth}{0.5pt}
+
+\vspace{1cm}
+
+{\Large Mayank Tripathi}
+
+\vspace{0.5cm}
+
+{\large ARCHER Backend Architecture Series}
+
+\vfill
+
+{\large
+A production-grade distributed systems engineering curriculum \\
+for backend engineers building infrastructure in Go.
+}
+
+\vspace{2cm}
+
+{\large 2026 Edition}
+
+\end{center}
+
+\end{titlepage}
+
+\nopagecolor
+
+\frontmatter
+
+\tableofcontents
+
+\newpage
+
+\mainmatter
 
 \hypertarget{archer-go-engineering-handbook}{%
 \section{ARCHER Go Engineering
@@ -220,7 +375,7 @@ High-Performance Distributed Architecture and ARCHER Systems Design
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \hypertarget{chapter-01-how-to-think-in-go-for-distributed-systems}{%
-\section{Chapter 01 --- How to Think in Go for Distributed
+\chapter{How to Think in Go for Distributed
 Systems}\label{chapter-01-how-to-think-in-go-for-distributed-systems}}
 
 \begin{quote}
@@ -313,24 +468,20 @@ classpath must be configured.
 
 In Go:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \VariableTok{GOOS}\OperatorTok{=}\NormalTok{linux }\VariableTok{GOARCH}\OperatorTok{=}\NormalTok{amd64 }\ExtensionTok{go}\NormalTok{ build }\AttributeTok{{-}o}\NormalTok{ archer{-}agent ./cmd/agent/}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 That command produces a \textbf{single, statically-linked ELF binary}
 with zero external runtime dependencies. The entire program --- your
 code, the standard library, the goroutine scheduler, the GC --- is
 inside that binary.
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{FROM}\NormalTok{ scratch}
 \KeywordTok{COPY}\NormalTok{ archer{-}agent /archer{-}agent}
 \KeywordTok{ENTRYPOINT}\NormalTok{ [}\StringTok{"/archer{-}agent"}\NormalTok{]}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 This is a legitimate, production-grade Dockerfile. The image is 12--20
 MB. There is no base OS layer. There is no JVM or interpreter. The
@@ -404,8 +555,7 @@ Go runtime \textbf{parks that goroutine} and puts another runnable
 goroutine on the same OS thread. You write code that looks synchronous
 but executes asynchronously at the runtime level.
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// This looks like a blocking call — it is NOT blocking an OS thread}
 \KeywordTok{func}\NormalTok{ handleConnection}\OperatorTok{(}\NormalTok{conn net}\OperatorTok{.}\NormalTok{Conn}\OperatorTok{)} \OperatorTok{\{}
 \NormalTok{    buf }\OperatorTok{:=} \BuiltInTok{make}\OperatorTok{([]}\DataTypeTok{byte}\OperatorTok{,} \DecValTok{4096}\OperatorTok{)}
@@ -423,8 +573,7 @@ but executes asynchronously at the runtime level.
         \ControlFlowTok{go}\NormalTok{ handleConnection}\OperatorTok{(}\NormalTok{conn}\OperatorTok{)} \CommentTok{// spawn goroutine — 2KB stack, \textasciitilde{}100ns cost}
     \OperatorTok{\}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 This loop handles tens of thousands of concurrent connections without a
 thread pool configuration. The runtime schedules goroutines across
@@ -458,8 +607,7 @@ In a load generator, you might have 500 concurrent goroutines sending
 HTTP requests and aggregating latency metrics into a shared struct. With
 shared memory:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// }\AlertTok{DANGER}\CommentTok{: data race — multiple goroutines writing concurrently}
 \KeywordTok{type}\NormalTok{ Metrics }\KeywordTok{struct} \OperatorTok{\{}
 \NormalTok{    TotalRequests }\DataTypeTok{int64}
@@ -474,8 +622,7 @@ shared memory:
 \NormalTok{    m}\OperatorTok{.}\NormalTok{TotalRequests}\OperatorTok{++}                              \CommentTok{// data race}
 \NormalTok{    m}\OperatorTok{.}\NormalTok{TotalLatency }\OperatorTok{+=}\NormalTok{ time}\OperatorTok{.}\NormalTok{Since}\OperatorTok{(}\NormalTok{start}\OperatorTok{).}\NormalTok{Nanoseconds}\OperatorTok{()} \CommentTok{// data race}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 Go's race detector (\texttt{go\ run\ -race}) will flag this. The fix
 requires mutexes or atomics, which introduces contention and locking
@@ -485,8 +632,7 @@ discipline.
 \subsubsection{4.2 Channel-Based
 Communication}\label{channel-based-communication}}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{type}\NormalTok{ MetricEvent }\KeywordTok{struct} \OperatorTok{\{}
 \NormalTok{    Latency time}\OperatorTok{.}\NormalTok{Duration}
 \NormalTok{    Success }\DataTypeTok{bool}
@@ -530,8 +676,7 @@ Communication}\label{channel-based-communication}}
     \BuiltInTok{close}\OperatorTok{(}\NormalTok{results}\OperatorTok{)}
     \OperatorTok{\textless{}{-}}\NormalTok{done}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 The aggregator goroutine owns the metric state exclusively. No mutex
 required. The channel is the synchronization primitive.
@@ -547,14 +692,12 @@ Model}\label{the-error-handling-mental-model}}
 
 Go has no exceptions. Errors are values returned from functions.
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \NormalTok{result}\OperatorTok{,}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ doSomething}\OperatorTok{()}
 \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
     \ControlFlowTok{return}\NormalTok{ fmt}\OperatorTok{.}\NormalTok{Errorf}\OperatorTok{(}\StringTok{"context about what failed: \%w"}\OperatorTok{,}\NormalTok{ err}\OperatorTok{)}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 Coming from C++ (exceptions, error codes) or Java (checked/unchecked
 exceptions), this feels verbose. It is. It is also \textbf{explicit
@@ -570,8 +713,7 @@ requires a top-level catch-all that swallows context. In Go, every error
 is visible in the call chain. You decide: retry, log-and-skip, or
 escalate.
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{func}\NormalTok{ processKafkaMessage}\OperatorTok{(}\NormalTok{msg kafka}\OperatorTok{.}\NormalTok{Message}\OperatorTok{)} \DataTypeTok{error} \OperatorTok{\{}
 \NormalTok{    event}\OperatorTok{,}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ parseEvent}\OperatorTok{(}\NormalTok{msg}\OperatorTok{.}\NormalTok{Value}\OperatorTok{)}
     \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
@@ -599,8 +741,7 @@ escalate.
         \OperatorTok{\}}
     \OperatorTok{\}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 The \texttt{\%w} verb wraps errors so callers can use
 \texttt{errors.Is()} and \texttt{errors.As()} to inspect the error
@@ -617,18 +758,15 @@ Typing}\label{the-interface-mental-model-structural-typing-vs-nominal-typing}}
 In Java and C++, a type must explicitly declare that it implements an
 interface:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// Java — explicit declaration}
 \KeywordTok{class}\NormalTok{ KafkaMetricStore }\KeywordTok{implements}\NormalTok{ MetricStore }\OperatorTok{\{} \KeywordTok{...} \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 In Go, \textbf{if a type has the required methods, it satisfies the
 interface}. No explicit declaration. This is structural (duck) typing.
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{type}\NormalTok{ MetricStore }\KeywordTok{interface} \OperatorTok{\{}
 \NormalTok{    Store}\OperatorTok{(}\NormalTok{m Metric}\OperatorTok{)} \DataTypeTok{error}
 \NormalTok{    Query}\OperatorTok{(}\NormalTok{id }\DataTypeTok{string}\OperatorTok{)} \OperatorTok{(}\NormalTok{Metric}\OperatorTok{,} \DataTypeTok{error}\OperatorTok{)}
@@ -643,8 +781,7 @@ interface}. No explicit declaration. This is structural (duck) typing.
 \KeywordTok{type}\NormalTok{ RedisCache }\KeywordTok{struct} \OperatorTok{\{}\NormalTok{ client }\OperatorTok{*}\NormalTok{redis}\OperatorTok{.}\NormalTok{Client }\OperatorTok{\}}
 \KeywordTok{func} \OperatorTok{(}\NormalTok{r }\OperatorTok{*}\NormalTok{RedisCache}\OperatorTok{)}\NormalTok{ Store}\OperatorTok{(}\NormalTok{m Metric}\OperatorTok{)} \DataTypeTok{error}  \OperatorTok{\{} \OperatorTok{...} \OperatorTok{\}}
 \KeywordTok{func} \OperatorTok{(}\NormalTok{r }\OperatorTok{*}\NormalTok{RedisCache}\OperatorTok{)}\NormalTok{ Query}\OperatorTok{(}\NormalTok{id }\DataTypeTok{string}\OperatorTok{)} \OperatorTok{(}\NormalTok{Metric}\OperatorTok{,} \DataTypeTok{error}\OperatorTok{)} \OperatorTok{\{} \OperatorTok{...} \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \textbf{Why this matters architecturally:} - You can define small,
 focused interfaces at the \emph{consumption site}, not the definition
@@ -690,8 +827,7 @@ fundamental infrastructure advantage.
 \subsubsection{7.2 No Runtime
 Dependencies}\label{no-runtime-dependencies}}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{\# C++ — depends on libstdc++, possibly libboost, etc.}
 \FunctionTok{ldd}\NormalTok{ ./archer{-}agent}
 \CommentTok{\# → libstdc++.so.6 =\textgreater{} /usr/lib/x86\_64{-}linux{-}gnu/libstdc++.so.6}
@@ -699,8 +835,7 @@ Dependencies}\label{no-runtime-dependencies}}
 \CommentTok{\# Go — (with CGO\_ENABLED=0)}
 \FunctionTok{ldd}\NormalTok{ ./archer{-}agent}
 \CommentTok{\# → not a dynamic executable}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 Go binaries with \texttt{CGO\_ENABLED=0} are fully static. The Docker
 image can be \texttt{FROM\ scratch}. Fewer dependencies = smaller attack
@@ -713,8 +848,7 @@ Shutdown}\label{signal-handling-and-graceful-shutdown}}
 Go's standard library handles OS signals cleanly. You will implement
 this in every ARCHER service:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{func}\NormalTok{ main}\OperatorTok{()} \OperatorTok{\{}
 \NormalTok{    ctx}\OperatorTok{,}\NormalTok{ cancel }\OperatorTok{:=}\NormalTok{ signal}\OperatorTok{.}\NormalTok{NotifyContext}\OperatorTok{(}\NormalTok{context}\OperatorTok{.}\NormalTok{Background}\OperatorTok{(),}\NormalTok{ os}\OperatorTok{.}\NormalTok{Interrupt}\OperatorTok{,}\NormalTok{ syscall}\OperatorTok{.}\NormalTok{SIGTERM}\OperatorTok{)}
     \ControlFlowTok{defer}\NormalTok{ cancel}\OperatorTok{()}
@@ -736,8 +870,7 @@ this in every ARCHER service:
 \NormalTok{        log}\OperatorTok{.}\NormalTok{Printf}\OperatorTok{(}\StringTok{"shutdown error: \%v"}\OperatorTok{,}\NormalTok{ err}\OperatorTok{)}
     \OperatorTok{\}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 Kubernetes sends \texttt{SIGTERM} before forcibly killing a pod. This
 10-second graceful shutdown window allows in-flight requests to
@@ -1075,7 +1208,7 @@ and services.}
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \hypertarget{chapter-02-go-project-structure-for-real-backend-systems}{%
-\section{Chapter 02 --- Go Project Structure for Real Backend
+\chapter{Go Project Structure for Real Backend
 Systems}\label{chapter-02-go-project-structure-for-real-backend-systems}}
 
 \begin{quote}
@@ -1137,14 +1270,12 @@ require (
 The module path (\texttt{github.com/org/archer}) is the import prefix
 for all internal packages:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{import} \OperatorTok{(}
     \StringTok{"github.com/org/archer/internal/telemetry"}
     \StringTok{"github.com/org/archer/pkg/loadgen"}
 \OperatorTok{)}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \textbf{Key insight}: The module path is the global namespace for your
 entire codebase. Choose it once; it appears in every import.
@@ -1157,14 +1288,12 @@ Builds}{1.2 go.sum and Reproducible Builds}}\label{go.sum-and-reproducible-build
 Committed to version control. Docker builds are reproducible because
 \texttt{go\ mod\ download} will verify hashes match.
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{COPY}\NormalTok{ go.mod go.sum ./}
 \KeywordTok{RUN} \ExtensionTok{go}\NormalTok{ mod download  }\CommentTok{\# cached layer; only invalidated when deps change}
 \KeywordTok{COPY}\NormalTok{ . .}
 \KeywordTok{RUN} \ExtensionTok{go}\NormalTok{ build ./cmd/...}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 This Docker layer caching strategy means your builds are fast even in CI
 because the \texttt{go\ mod\ download} layer is cached as long as
@@ -1250,8 +1379,7 @@ Every subdirectory of \texttt{cmd/} produces one binary. The
 \texttt{main.go} in each is thin --- it wires dependencies and starts
 the service. Business logic never lives here.
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// cmd/api/main.go — thin wiring, no logic}
 \KeywordTok{package}\NormalTok{ main}
 
@@ -1290,8 +1418,7 @@ the service. Business logic never lives here.
 \NormalTok{        log}\OperatorTok{.}\NormalTok{Fatalf}\OperatorTok{(}\StringTok{"server error: \%v"}\OperatorTok{,}\NormalTok{ err}\OperatorTok{)}
     \OperatorTok{\}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \textbf{Rule}: \texttt{cmd/*/main.go} is for construction (dependency
 injection) and lifecycle (start, shutdown). Nothing else.
@@ -1300,16 +1427,14 @@ injection) and lifecycle (start, shutdown). Nothing else.
 \subsubsection{3.2 Building Multiple
 Binaries}\label{building-multiple-binaries}}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{\# Makefile}
 \OtherTok{.PHONY:}\DataTypeTok{ build}
 \DecValTok{build:}
 \NormalTok{    GOOS=linux GOARCH=amd64 CGO\_ENABLED=0 go build {-}ldflags=}\StringTok{"{-}s {-}w"}\NormalTok{ {-}o dist/agent ./cmd/agent/}
 \NormalTok{    GOOS=linux GOARCH=amd64 CGO\_ENABLED=0 go build {-}ldflags=}\StringTok{"{-}s {-}w"}\NormalTok{ {-}o dist/api ./cmd/api/}
 \NormalTok{    GOOS=linux GOARCH=amd64 CGO\_ENABLED=0 go build {-}ldflags=}\StringTok{"{-}s {-}w"}\NormalTok{ {-}o dist/worker ./cmd/worker/}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 The \texttt{-ldflags="-s\ -w"} strips debug symbols and DWARF data,
 reducing binary size by 20--40\%.
@@ -1351,8 +1476,7 @@ internal/telemetry/
 └── types.go            # Internal type definitions
 \end{verbatim}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// internal/telemetry/pipeline.go}
 \KeywordTok{package}\NormalTok{ telemetry}
 
@@ -1403,8 +1527,7 @@ internal/telemetry/
     \OperatorTok{\}}
     \ControlFlowTok{return}\NormalTok{ p}\OperatorTok{.}\NormalTok{exporter}\OperatorTok{.}\NormalTok{Export}\OperatorTok{(}\NormalTok{metrics}\OperatorTok{)}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 This is production-grade: context-driven lifecycle, periodic flush with
 final drain on shutdown, non-fatal export errors.
@@ -1431,8 +1554,7 @@ external consumption. For ARCHER, this includes:
   \texttt{pkg/protocol} --- shared message types for Kafka events
 \end{itemize}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// pkg/metrics/types.go}
 \KeywordTok{package}\NormalTok{ metrics}
 
@@ -1457,8 +1579,7 @@ external consumption. For ARCHER, this includes:
 \NormalTok{    Max time}\OperatorTok{.}\NormalTok{Duration }\StringTok{\textasciigrave{}json:"max"\textasciigrave{}}
 \NormalTok{    Min time}\OperatorTok{.}\NormalTok{Duration }\StringTok{\textasciigrave{}json:"min"\textasciigrave{}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \textbf{Rule}: Anything in \texttt{pkg/} is a public contract. Treat it
 like a versioned API. Changes require versioning discipline
@@ -1513,8 +1634,7 @@ problem. The solutions are: 1. Extract the shared type into a third
 package both can import 2. Use an interface to invert the dependency 3.
 Merge the packages if they're truly inseparable
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// Problem: telemetry imports kafka, kafka imports telemetry}
 
 \CommentTok{// Solution: extract shared type to pkg/protocol/}
@@ -1523,8 +1643,7 @@ Merge the packages if they're truly inseparable
 \KeywordTok{type}\NormalTok{ TelemetryEvent }\KeywordTok{struct} \OperatorTok{\{}
     \CommentTok{// shared type that both kafka and telemetry packages import}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \hypertarget{package-naming-no-generic-names}{%
 \subsubsection{6.3 Package Naming --- No Generic
@@ -1552,8 +1671,7 @@ Configuration}\label{struct-based-configuration}}
 Never pass raw \texttt{os.Getenv()} calls deep into your code. Load all
 configuration at startup into a typed struct:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// internal/config/config.go}
 \KeywordTok{package}\NormalTok{ config}
 
@@ -1615,8 +1733,7 @@ configuration at startup into a typed struct:
     \OperatorTok{\}}
     \ControlFlowTok{return} \OtherTok{nil}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \hypertarget{environment-overrides-for-dockerkubernetes}{%
 \subsubsection{7.2 Environment Overrides for
@@ -1625,8 +1742,7 @@ Docker/Kubernetes}\label{environment-overrides-for-dockerkubernetes}}
 In containers, environment variables override config file values. This
 follows the \href{https://12factor.net/}{12-factor app} pattern:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{func}\NormalTok{ Load}\OperatorTok{(}\NormalTok{path }\DataTypeTok{string}\OperatorTok{)} \OperatorTok{(*}\NormalTok{Config}\OperatorTok{,} \DataTypeTok{error}\OperatorTok{)} \OperatorTok{\{}
 \NormalTok{    cfg}\OperatorTok{,}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ loadFromFile}\OperatorTok{(}\NormalTok{path}\OperatorTok{)}
     \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
@@ -1643,8 +1759,7 @@ follows the \href{https://12factor.net/}{12-factor app} pattern:
 
     \ControlFlowTok{return}\NormalTok{ cfg}\OperatorTok{,}\NormalTok{ cfg}\OperatorTok{.}\NormalTok{validate}\OperatorTok{()}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 In Kubernetes, sensitive values (passwords, API keys) come from Secrets
 mounted as environment variables. The config struct abstraction keeps
@@ -1666,8 +1781,7 @@ not a limitation --- it is a readability advantage.
 Every non-trivial struct is created via a \texttt{NewXxx} constructor
 function that validates inputs:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// internal/worker/pool.go}
 \KeywordTok{package}\NormalTok{ worker}
 
@@ -1700,8 +1814,7 @@ function that validates inputs:
 \NormalTok{        workerFunc}\OperatorTok{:}\NormalTok{ fn}\OperatorTok{,}
     \OperatorTok{\},} \OtherTok{nil}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \hypertarget{the-wire-graph-in-cmdmain.go}{%
 \subsubsection{\texorpdfstring{8.2 The Wire Graph in
@@ -1709,8 +1822,7 @@ function that validates inputs:
 
 All dependency construction and wiring happens in \texttt{main()}:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{func}\NormalTok{ main}\OperatorTok{()} \OperatorTok{\{}
 \NormalTok{    cfg}\OperatorTok{,}\NormalTok{ \_ }\OperatorTok{:=}\NormalTok{ config}\OperatorTok{.}\NormalTok{Load}\OperatorTok{(}\NormalTok{os}\OperatorTok{.}\NormalTok{Getenv}\OperatorTok{(}\StringTok{"CONFIG\_PATH"}\OperatorTok{))}
 
@@ -1735,8 +1847,7 @@ All dependency construction and wiring happens in \texttt{main()}:
     \ControlFlowTok{go}\NormalTok{ pipeline}\OperatorTok{.}\NormalTok{Run}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{)}
 \NormalTok{    server}\OperatorTok{.}\NormalTok{Run}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{)}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 This is a \textbf{dependency graph rendered in code}. No XML, no
 annotations, no magic. Every dependency is explicit and traceable.
@@ -1756,8 +1867,7 @@ internal/store/
 └── types.go            # Store-specific types
 \end{verbatim}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// internal/store/interface.go}
 \KeywordTok{package}\NormalTok{ store}
 
@@ -1780,11 +1890,9 @@ internal/store/
 \NormalTok{    UpdateStatus}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ id }\DataTypeTok{string}\OperatorTok{,}\NormalTok{ status RunStatus}\OperatorTok{)} \DataTypeTok{error}
 \NormalTok{    Get}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ id }\DataTypeTok{string}\OperatorTok{)} \OperatorTok{(}\NormalTok{Run}\OperatorTok{,} \DataTypeTok{error}\OperatorTok{)}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// internal/store/memory.go}
 \CommentTok{// In{-}memory implementation for testing and local development}
 
@@ -1813,8 +1921,7 @@ internal/store/
 \NormalTok{    s}\OperatorTok{.}\NormalTok{metrics}\OperatorTok{[}\NormalTok{m}\OperatorTok{.}\NormalTok{RunID}\OperatorTok{]} \OperatorTok{=} \BuiltInTok{append}\OperatorTok{(}\NormalTok{s}\OperatorTok{.}\NormalTok{metrics}\OperatorTok{[}\NormalTok{m}\OperatorTok{.}\NormalTok{RunID}\OperatorTok{],}\NormalTok{ m}\OperatorTok{)}
     \ControlFlowTok{return} \OtherTok{nil}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \textbf{Why this pattern matters}: Tests use \texttt{MemoryMetricStore}.
 Staging uses \texttt{PostgresMetricStore}. Production may use
@@ -1837,8 +1944,7 @@ archer/
 │   │   └── pipeline_integration_test.go # Integration tests (build tag gated)
 \end{verbatim}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// internal/telemetry/pipeline\_test.go}
 \KeywordTok{package}\NormalTok{ telemetry\_test  }\CommentTok{// external test package — tests the public API only}
 
@@ -1876,8 +1982,7 @@ archer/
 \NormalTok{        t}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\StringTok{"expected at least one export, got none"}\OperatorTok{)}
     \OperatorTok{\}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \textbf{Key}: Test the interface, not the implementation. Use
 \texttt{package\ telemetry\_test} (external test package) to ensure
@@ -1889,8 +1994,7 @@ you're testing the public surface.
 \subsection{11. Dockerfile and Build
 Strategy}\label{dockerfile-and-build-strategy}}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{\# deploy/docker/api.Dockerfile}
 
 \CommentTok{\# Stage 1: Build}
@@ -1913,15 +2017,13 @@ Strategy}\label{dockerfile-and-build-strategy}}
 
 \KeywordTok{EXPOSE}\NormalTok{ 8080}
 \KeywordTok{ENTRYPOINT}\NormalTok{ [}\StringTok{"/archer{-}api"}\NormalTok{]}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 The \texttt{X\ main.version=\$\{VERSION\}} linker flag injects the build
 version string at compile time. Your \texttt{/health} endpoint can
 expose this:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{var}\NormalTok{ version }\OperatorTok{=} \StringTok{"dev"} \CommentTok{// overridden at build time via {-}ldflags}
 
 \KeywordTok{func}\NormalTok{ healthHandler}\OperatorTok{(}\NormalTok{w http}\OperatorTok{.}\NormalTok{ResponseWriter}\OperatorTok{,}\NormalTok{ r }\OperatorTok{*}\NormalTok{http}\OperatorTok{.}\NormalTok{Request}\OperatorTok{)} \OperatorTok{\{}
@@ -1930,8 +2032,7 @@ expose this:
         \StringTok{"version"}\OperatorTok{:}\NormalTok{ version}\OperatorTok{,}
     \OperatorTok{\})}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
@@ -2174,7 +2275,7 @@ sketched.}
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \hypertarget{chapter-03-structs-interfaces-and-composition-in-go}{%
-\section{Chapter 03 --- Structs, Interfaces, and Composition in
+\chapter{Structs, Interfaces, and Composition in
 Go}\label{chapter-03-structs-interfaces-and-composition-in-go}}
 
 \begin{quote}
@@ -2192,16 +2293,14 @@ distributed backends.}
 Go has no classes, no constructors, no inheritance. A struct is a value
 type that holds named fields. Methods attach to types, not classes.
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{type}\NormalTok{ Worker }\KeywordTok{struct} \OperatorTok{\{}
 \NormalTok{    ID       }\DataTypeTok{string}
 \NormalTok{    Endpoint }\DataTypeTok{string}
 \NormalTok{    Timeout  time}\OperatorTok{.}\NormalTok{Duration}
 \NormalTok{    client   }\OperatorTok{*}\NormalTok{http}\OperatorTok{.}\NormalTok{Client }\CommentTok{// unexported — internal state}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \textbf{Exported fields} (uppercase) are part of the public API ---
 JSON-serializable, accessible outside the package.\\
@@ -2211,8 +2310,7 @@ accessed outside the package. This is the encapsulation boundary in Go.
 The ``constructor'' pattern is a function, by convention
 \texttt{NewXxx}:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{func}\NormalTok{ NewWorker}\OperatorTok{(}\NormalTok{id}\OperatorTok{,}\NormalTok{ endpoint }\DataTypeTok{string}\OperatorTok{,}\NormalTok{ timeout time}\OperatorTok{.}\NormalTok{Duration}\OperatorTok{)} \OperatorTok{(*}\NormalTok{Worker}\OperatorTok{,} \DataTypeTok{error}\OperatorTok{)} \OperatorTok{\{}
     \ControlFlowTok{if}\NormalTok{ endpoint }\OperatorTok{==} \StringTok{""} \OperatorTok{\{}
         \ControlFlowTok{return} \OtherTok{nil}\OperatorTok{,}\NormalTok{ fmt}\OperatorTok{.}\NormalTok{Errorf}\OperatorTok{(}\StringTok{"worker \%s: endpoint must not be empty"}\OperatorTok{,}\NormalTok{ id}\OperatorTok{)}
@@ -2229,8 +2327,7 @@ The ``constructor'' pattern is a function, by convention
         \OperatorTok{\},}
     \OperatorTok{\},} \OtherTok{nil}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 Validation at construction time prevents invalid objects from ever
 existing. This is the same principle as invariant preservation in C++,
@@ -2240,8 +2337,7 @@ but explicit rather than enforced via \texttt{private} constructors.
 \subsubsection{Value vs Pointer
 Receivers}\label{value-vs-pointer-receivers}}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// Value receiver — operates on a copy; safe for reads, useless for mutation}
 \KeywordTok{func} \OperatorTok{(}\NormalTok{w Worker}\OperatorTok{)}\NormalTok{ String}\OperatorTok{()} \DataTypeTok{string} \OperatorTok{\{}
     \ControlFlowTok{return}\NormalTok{ fmt}\OperatorTok{.}\NormalTok{Sprintf}\OperatorTok{(}\StringTok{"Worker(\%s @ \%s)"}\OperatorTok{,}\NormalTok{ w}\OperatorTok{.}\NormalTok{ID}\OperatorTok{,}\NormalTok{ w}\OperatorTok{.}\NormalTok{Endpoint}\OperatorTok{)}
@@ -2252,8 +2348,7 @@ Receivers}\label{value-vs-pointer-receivers}}
 \NormalTok{    w}\OperatorTok{.}\NormalTok{Timeout }\OperatorTok{=}\NormalTok{ d}
 \NormalTok{    w}\OperatorTok{.}\NormalTok{client}\OperatorTok{.}\NormalTok{Timeout }\OperatorTok{=}\NormalTok{ d}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \textbf{Rule of thumb for distributed systems:} - Large structs → always
 pointer receiver - Structs with internal state that must mutate
@@ -2274,18 +2369,15 @@ An interface in Go is a set of method signatures. Any type that has
 those methods satisfies the interface --- with zero explicit
 declaration.
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// Defined in internal/store/ — the consumption site}
 \KeywordTok{type}\NormalTok{ MetricStore }\KeywordTok{interface} \OperatorTok{\{}
 \NormalTok{    Save}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ m Metric}\OperatorTok{)} \DataTypeTok{error}
 \NormalTok{    GetByRunID}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ runID }\DataTypeTok{string}\OperatorTok{)} \OperatorTok{([]}\NormalTok{Metric}\OperatorTok{,} \DataTypeTok{error}\OperatorTok{)}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// internal/store/postgres.go — satisfies MetricStore implicitly}
 \KeywordTok{type}\NormalTok{ PostgresStore }\KeywordTok{struct}\OperatorTok{\{}\NormalTok{ db }\OperatorTok{*}\NormalTok{sql}\OperatorTok{.}\NormalTok{DB }\OperatorTok{\}}
 
@@ -2300,8 +2392,7 @@ declaration.
 
 \KeywordTok{func} \OperatorTok{(}\NormalTok{s }\OperatorTok{*}\NormalTok{MemoryStore}\OperatorTok{)}\NormalTok{ Save}\OperatorTok{(}\NormalTok{\_ context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ m Metric}\OperatorTok{)} \DataTypeTok{error}            \OperatorTok{\{} \CommentTok{/* ... */} \OperatorTok{\}}
 \KeywordTok{func} \OperatorTok{(}\NormalTok{s }\OperatorTok{*}\NormalTok{MemoryStore}\OperatorTok{)}\NormalTok{ GetByRunID}\OperatorTok{(}\NormalTok{\_ context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ runID }\DataTypeTok{string}\OperatorTok{)} \OperatorTok{([]}\NormalTok{Metric}\OperatorTok{,} \DataTypeTok{error}\OperatorTok{)} \OperatorTok{\{} \CommentTok{/* ... */} \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 The \texttt{PostgresStore} and \texttt{MemoryStore} types know nothing
 about the \texttt{MetricStore} interface. The interface is owned by the
@@ -2315,24 +2406,20 @@ Site}\label{interfaces-at-the-consumption-site}}
 
 Contrast Go with Java:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// Java: interface defined at the provider side, explicitly implemented}
 \KeywordTok{public} \KeywordTok{interface}\NormalTok{ MetricStore }\OperatorTok{\{} \KeywordTok{...} \OperatorTok{\}}
 \KeywordTok{public} \KeywordTok{class}\NormalTok{ PostgresStore }\KeywordTok{implements}\NormalTok{ MetricStore }\OperatorTok{\{} \KeywordTok{...} \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// Go: interface defined at the consumer side, implicitly satisfied}
 \CommentTok{// In the package that USES the store:}
 \KeywordTok{type}\NormalTok{ MetricStore }\KeywordTok{interface} \OperatorTok{\{}\NormalTok{ Save}\OperatorTok{(...)} \DataTypeTok{error} \OperatorTok{\}}
 
 \CommentTok{// In main.go: the concrete type flows in}
 \KeywordTok{var}\NormalTok{ store MetricStore }\OperatorTok{=}\NormalTok{ postgres}\OperatorTok{.}\NormalTok{NewStore}\OperatorTok{(}\NormalTok{db}\OperatorTok{)}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 This means you can define your own interface for a third-party library
 type and wrap it for testing --- without modifying the library.
@@ -2344,8 +2431,7 @@ Small}\label{interface-sizing-keep-them-small}}
 The Go standard library uses the rule of thumb: \textbf{the bigger the
 interface, the weaker the abstraction}.
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// io.Reader — one method; used EVERYWHERE}
 \KeywordTok{type}\NormalTok{ Reader }\KeywordTok{interface} \OperatorTok{\{}
 \NormalTok{    Read}\OperatorTok{(}\NormalTok{p }\OperatorTok{[]}\DataTypeTok{byte}\OperatorTok{)} \OperatorTok{(}\NormalTok{n }\DataTypeTok{int}\OperatorTok{,}\NormalTok{ err }\DataTypeTok{error}\OperatorTok{)}
@@ -2361,13 +2447,11 @@ interface, the weaker the abstraction}.
 \NormalTok{    Reader}
 \NormalTok{    Writer}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 For ARCHER, follow this principle:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// Too broad — forces implementers to do too much}
 \KeywordTok{type}\NormalTok{ TelemetryBackend }\KeywordTok{interface} \OperatorTok{\{}
 \NormalTok{    Save}\OperatorTok{(}\NormalTok{Metric}\OperatorTok{)} \DataTypeTok{error}
@@ -2389,8 +2473,7 @@ For ARCHER, follow this principle:
 \KeywordTok{type}\NormalTok{ MetricExporter }\KeywordTok{interface} \OperatorTok{\{}
 \NormalTok{    Export}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ metrics }\OperatorTok{[]}\NormalTok{Metric}\OperatorTok{)} \DataTypeTok{error}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
@@ -2401,8 +2484,7 @@ Model}\label{embedding-gos-composition-model}}
 Go replaces inheritance with \textbf{struct embedding}. Embedding
 promotes the embedded type's fields and methods to the outer struct.
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{type}\NormalTok{ BaseWorker }\KeywordTok{struct} \OperatorTok{\{}
 \NormalTok{    ID      }\DataTypeTok{string}
 \NormalTok{    mu      sync}\OperatorTok{.}\NormalTok{Mutex}
@@ -2435,8 +2517,7 @@ promotes the embedded type's fields and methods to the outer struct.
     \OperatorTok{\}}
     \CommentTok{// ...}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \hypertarget{embedding-interfaces-mocking-and-partial-implementations}{%
 \subsubsection{3.1 Embedding Interfaces --- Mocking and Partial
@@ -2445,8 +2526,7 @@ Implementations}\label{embedding-interfaces-mocking-and-partial-implementations}
 A common pattern for test doubles: embed the interface to get all
 methods as no-ops, then override only what you need:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{type}\NormalTok{ MockMetricStore }\KeywordTok{struct} \OperatorTok{\{}
 \NormalTok{    MetricStore }\CommentTok{// embed interface — all methods panic by default if called}
 \NormalTok{    SaveFunc    }\KeywordTok{func}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ m Metric}\OperatorTok{)} \DataTypeTok{error}
@@ -2466,8 +2546,7 @@ methods as no-ops, then override only what you need:
         \ControlFlowTok{return} \OtherTok{nil}
     \OperatorTok{\},}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 This avoids creating a full struct that implements every method when
 only one method is relevant to the test.
@@ -2485,8 +2564,7 @@ Pattern}\label{middleware-decorator-pattern}}
 The most important composition pattern in Go backends. Wrapping an
 interface with additional behavior:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// MetricStore with logging}
 \KeywordTok{type}\NormalTok{ LoggingMetricStore }\KeywordTok{struct} \OperatorTok{\{}
 \NormalTok{    inner  MetricStore}
@@ -2511,18 +2589,15 @@ interface with additional behavior:
 \KeywordTok{func} \OperatorTok{(}\NormalTok{s }\OperatorTok{*}\NormalTok{LoggingMetricStore}\OperatorTok{)}\NormalTok{ GetByRunID}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ runID }\DataTypeTok{string}\OperatorTok{)} \OperatorTok{([]}\NormalTok{Metric}\OperatorTok{,} \DataTypeTok{error}\OperatorTok{)} \OperatorTok{\{}
     \ControlFlowTok{return}\NormalTok{ s}\OperatorTok{.}\NormalTok{inner}\OperatorTok{.}\NormalTok{GetByRunID}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{,}\NormalTok{ runID}\OperatorTok{)}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// In main.go — stack decorators without touching the underlying store:}
 \KeywordTok{var}\NormalTok{ store MetricStore }\OperatorTok{=}\NormalTok{ postgres}\OperatorTok{.}\NormalTok{NewStore}\OperatorTok{(}\NormalTok{db}\OperatorTok{)}
 \NormalTok{store }\OperatorTok{=}\NormalTok{ store}\OperatorTok{.}\NormalTok{NewLoggingMetricStore}\OperatorTok{(}\NormalTok{store}\OperatorTok{,}\NormalTok{ logger}\OperatorTok{)}
 \NormalTok{store }\OperatorTok{=}\NormalTok{ store}\OperatorTok{.}\NormalTok{NewMetricMetricStore}\OperatorTok{(}\NormalTok{store}\OperatorTok{,}\NormalTok{ metricsClient}\OperatorTok{)} \CommentTok{// add Prometheus metrics}
 \NormalTok{store }\OperatorTok{=}\NormalTok{ store}\OperatorTok{.}\NormalTok{NewCircuitBreakerStore}\OperatorTok{(}\NormalTok{store}\OperatorTok{,}\NormalTok{ cbConfig}\OperatorTok{)}    \CommentTok{// add circuit breaker}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 This is the \textbf{decorator chain} pattern --- identical to HTTP
 middleware, but applied to any interface. Each layer adds orthogonal
@@ -2534,21 +2609,18 @@ behavior without modifying existing code.
 The standard \texttt{http.Handler} interface is the clearest example of
 composition in the standard library:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{type}\NormalTok{ Handler }\KeywordTok{interface} \OperatorTok{\{}
 \NormalTok{    ServeHTTP}\OperatorTok{(}\NormalTok{ResponseWriter}\OperatorTok{,} \OperatorTok{*}\NormalTok{Request}\OperatorTok{)}
 \OperatorTok{\}}
 
 \KeywordTok{type}\NormalTok{ HandlerFunc }\KeywordTok{func}\OperatorTok{(}\NormalTok{ResponseWriter}\OperatorTok{,} \OperatorTok{*}\NormalTok{Request}\OperatorTok{)}
 \KeywordTok{func} \OperatorTok{(}\NormalTok{f HandlerFunc}\OperatorTok{)}\NormalTok{ ServeHTTP}\OperatorTok{(}\NormalTok{w ResponseWriter}\OperatorTok{,}\NormalTok{ r }\OperatorTok{*}\NormalTok{Request}\OperatorTok{)} \OperatorTok{\{}\NormalTok{ f}\OperatorTok{(}\NormalTok{w}\OperatorTok{,}\NormalTok{ r}\OperatorTok{)} \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 Building a middleware chain:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{type}\NormalTok{ Middleware }\KeywordTok{func}\OperatorTok{(}\NormalTok{http}\OperatorTok{.}\NormalTok{Handler}\OperatorTok{)}\NormalTok{ http}\OperatorTok{.}\NormalTok{Handler}
 
 \KeywordTok{func}\NormalTok{ RequestLogger}\OperatorTok{(}\NormalTok{logger }\OperatorTok{*}\NormalTok{zap}\OperatorTok{.}\NormalTok{Logger}\OperatorTok{)}\NormalTok{ Middleware }\OperatorTok{\{}
@@ -2592,8 +2664,7 @@ Building a middleware chain:
 \NormalTok{    RequestLogger}\OperatorTok{(}\NormalTok{logger}\OperatorTok{),}
 \NormalTok{    RequireAuth}\OperatorTok{(}\NormalTok{cfg}\OperatorTok{.}\NormalTok{APIKey}\OperatorTok{),}
 \OperatorTok{))}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \hypertarget{the-worker-pool-with-interface-typed-jobs}{%
 \subsubsection{4.3 The Worker Pool with Interface-Typed
@@ -2602,8 +2673,7 @@ Jobs}\label{the-worker-pool-with-interface-typed-jobs}}
 Combining structs, interfaces, and channels into the load generator's
 core:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// pkg/loadgen/job.go}
 \KeywordTok{type}\NormalTok{ Job }\KeywordTok{interface} \OperatorTok{\{}
 \NormalTok{    Execute}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{)}\NormalTok{ Result}
@@ -2651,15 +2721,13 @@ core:
 \NormalTok{        Metadata}\OperatorTok{:} \KeywordTok{map}\OperatorTok{[}\DataTypeTok{string}\OperatorTok{]}\DataTypeTok{string}\OperatorTok{\{}\StringTok{"status"}\OperatorTok{:}\NormalTok{ strconv}\OperatorTok{.}\NormalTok{Itoa}\OperatorTok{(}\NormalTok{resp}\OperatorTok{.}\NormalTok{StatusCode}\OperatorTok{)\},}
     \OperatorTok{\}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 The worker pool doesn't know what a \texttt{Job} does. It just calls
 \texttt{Execute}. You can swap HTTP jobs for gRPC jobs, database query
 jobs, or Kafka publish jobs without changing the pool:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// internal/worker/pool.go}
 \KeywordTok{type}\NormalTok{ Pool }\KeywordTok{struct} \OperatorTok{\{}
 \NormalTok{    concurrency }\DataTypeTok{int}
@@ -2688,8 +2756,7 @@ jobs, or Kafka publish jobs without changing the pool:
     \OperatorTok{\}}
 \NormalTok{    wg}\OperatorTok{.}\NormalTok{Wait}\OperatorTok{()}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
@@ -2701,8 +2768,7 @@ Sometimes you receive an interface value and need the concrete type. Use
 type assertions carefully --- prefer interface composition to avoid
 needing them.
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// Type assertion — panics if wrong type without the comma{-}ok form}
 \NormalTok{store}\OperatorTok{,}\NormalTok{ ok }\OperatorTok{:=}\NormalTok{ backend}\OperatorTok{.(}\NormalTok{MetricStore}\OperatorTok{)}
 \ControlFlowTok{if} \OperatorTok{!}\NormalTok{ok }\OperatorTok{\{}
@@ -2722,8 +2788,7 @@ needing them.
         \ControlFlowTok{return}\NormalTok{ fmt}\OperatorTok{.}\NormalTok{Errorf}\OperatorTok{(}\StringTok{"unknown event type: \%T"}\OperatorTok{,}\NormalTok{ v}\OperatorTok{)}
     \OperatorTok{\}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 In a Kafka consumer processing multiple event types, a type switch on a
 base \texttt{Event} interface is cleaner than string-based dispatch. But
@@ -2739,8 +2804,7 @@ Validation}\label{struct-tags-json-yaml-and-validation}}
 Struct tags are read by \texttt{reflect} at runtime. They control
 serialization and validation:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{type}\NormalTok{ RunConfig }\KeywordTok{struct} \OperatorTok{\{}
 \NormalTok{    TargetURL   }\DataTypeTok{string}        \StringTok{\textasciigrave{}json:"target\_url"   yaml:"target\_url"   validate:"required,url"\textasciigrave{}}
 \NormalTok{    Concurrency }\DataTypeTok{int}           \StringTok{\textasciigrave{}json:"concurrency"  yaml:"concurrency"  validate:"required,min=1,max=10000"\textasciigrave{}}
@@ -2748,8 +2812,7 @@ serialization and validation:
 \NormalTok{    RampUp      time}\OperatorTok{.}\NormalTok{Duration }\StringTok{\textasciigrave{}json:"ramp\_up\_ms"   yaml:"ramp\_up"\textasciigrave{}}
 \NormalTok{    Headers     }\KeywordTok{map}\OperatorTok{[}\DataTypeTok{string}\OperatorTok{]}\DataTypeTok{string} \StringTok{\textasciigrave{}json:"headers"  yaml:"headers"\textasciigrave{}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \textbf{Common patterns:} - \texttt{json:"-"} omits a field from JSON
 serialization entirely (useful for passwords, internal state) -
@@ -2770,8 +2833,7 @@ Design}\label{concurrency-safe-struct-design}}
 Any struct accessed by multiple goroutines needs explicit
 synchronization:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// Thread{-}safe metric accumulator}
 \KeywordTok{type}\NormalTok{ MetricAccumulator }\KeywordTok{struct} \OperatorTok{\{}
 \NormalTok{    mu       sync}\OperatorTok{.}\NormalTok{RWMutex}
@@ -2812,8 +2874,7 @@ synchronization:
 \NormalTok{        Counts}\OperatorTok{:}\NormalTok{    maps}\OperatorTok{.}\NormalTok{Clone}\OperatorTok{(}\NormalTok{a}\OperatorTok{.}\NormalTok{counts}\OperatorTok{),}
     \OperatorTok{\}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \textbf{Design rules for concurrent structs:} 1. Use
 \texttt{sync.RWMutex} when reads are more frequent than writes 2. Use
@@ -2834,8 +2895,7 @@ In a load generator sending 100k requests/second, per-request allocation
 pressure triggers GC frequently. \texttt{sync.Pool} provides a
 goroutine-safe free list:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{var}\NormalTok{ bufferPool }\OperatorTok{=}\NormalTok{ sync}\OperatorTok{.}\NormalTok{Pool}\OperatorTok{\{}
 \NormalTok{    New}\OperatorTok{:} \KeywordTok{func}\OperatorTok{()}\NormalTok{ any }\OperatorTok{\{}
         \ControlFlowTok{return} \BuiltInTok{make}\OperatorTok{([]}\DataTypeTok{byte}\OperatorTok{,} \DecValTok{0}\OperatorTok{,} \DecValTok{4096}\OperatorTok{)}
@@ -2850,8 +2910,7 @@ goroutine-safe free list:
 \NormalTok{    \_}\OperatorTok{,}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ io}\OperatorTok{.}\NormalTok{ReadAll}\OperatorTok{(}\NormalTok{io}\OperatorTok{.}\NormalTok{LimitReader}\OperatorTok{(}\NormalTok{resp}\OperatorTok{.}\NormalTok{Body}\OperatorTok{,} \DecValTok{1}\OperatorTok{\textless{}\textless{}}\DecValTok{20}\OperatorTok{))} \CommentTok{// 1MB limit}
     \ControlFlowTok{return}\NormalTok{ buf}\OperatorTok{,}\NormalTok{ err}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \texttt{sync.Pool} is cleared by the GC between GC cycles, so it's not a
 permanent cache --- it reduces allocation pressure within a short time
@@ -2865,8 +2924,7 @@ Pipeline}\label{interface-composition-in-the-archer-telemetry-pipeline}}
 
 The full telemetry pipeline uses composed interfaces throughout:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// Narrow, focused interfaces}
 \KeywordTok{type}\NormalTok{ EventCollector }\KeywordTok{interface} \OperatorTok{\{}
 \NormalTok{    Collect}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ e Event}\OperatorTok{)} \DataTypeTok{error}
@@ -2900,8 +2958,7 @@ The full telemetry pipeline uses composed interfaces throughout:
     \OperatorTok{\}}
     \ControlFlowTok{return} \OperatorTok{\&}\NormalTok{TelemetryPipeline}\OperatorTok{\{}\NormalTok{collector}\OperatorTok{,}\NormalTok{ batcher}\OperatorTok{,}\NormalTok{ exporter}\OperatorTok{,}\NormalTok{ logger}\OperatorTok{\},} \OtherTok{nil}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 In tests, each interface has a mock/memory implementation. In
 production, they're backed by Kafka, Redis, and Prometheus. The pipeline
@@ -2979,14 +3036,12 @@ before assignment \\
 \subsection{Compile-Time Interface
 Verification}\label{compile-time-interface-verification}}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// Ensures at compile time that PostgresStore satisfies MetricStore.}
 \CommentTok{// If it doesn\textquotesingle{}t, you get a compile error — not a runtime panic.}
 \KeywordTok{var}\NormalTok{ \_ MetricStore }\OperatorTok{=} \OperatorTok{(*}\NormalTok{PostgresStore}\OperatorTok{)(}\OtherTok{nil}\OperatorTok{)}
 \KeywordTok{var}\NormalTok{ \_ MetricStore }\OperatorTok{=} \OperatorTok{(*}\NormalTok{MemoryStore}\OperatorTok{)(}\OtherTok{nil}\OperatorTok{)}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 Place these in \texttt{interface.go} or at the bottom of each
 implementation file. This is standard practice in production Go
@@ -3145,7 +3200,7 @@ systems.}
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \hypertarget{chapter-04-error-handling-philosophy-in-go}{%
-\section{Chapter 04 --- Error Handling Philosophy in
+\chapter{Error Handling Philosophy in
 Go}\label{chapter-04-error-handling-philosophy-in-go}}
 
 \begin{quote}
@@ -3172,8 +3227,7 @@ returned in-band, handled at every call site}. The consequence is
 verbosity. The benefit is that every failure path is visible, testable,
 and composable.
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// Java mental model — exception can silently propagate through layers}
 \NormalTok{public void consumeEvent}\OperatorTok{(}\NormalTok{KafkaRecord record}\OperatorTok{)} \OperatorTok{\{}
 \NormalTok{    MetricEvent event }\OperatorTok{=}\NormalTok{ parser}\OperatorTok{.}\NormalTok{parse}\OperatorTok{(}\NormalTok{record}\OperatorTok{.}\NormalTok{value}\OperatorTok{());} \CommentTok{// throws ParseException}
@@ -3192,8 +3246,7 @@ and composable.
     \OperatorTok{\}}
     \ControlFlowTok{return} \OtherTok{nil}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 The error from \texttt{consumeEvent} carries full context: what failed,
 where, and the original cause --- all as a string that appears in your
@@ -3207,13 +3260,11 @@ Interface}{2. The error Interface}}\label{the-error-interface}}
 
 \texttt{error} is a built-in interface with a single method:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{type} \DataTypeTok{error} \KeywordTok{interface} \OperatorTok{\{}
 \NormalTok{    Error}\OperatorTok{()} \DataTypeTok{string}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 Any type with an \texttt{Error()\ string} method satisfies it. This
 simplicity is intentional --- errors can carry arbitrary data, not just
@@ -3225,8 +3276,7 @@ strings.
 Sentinel errors are package-level variables representing known, expected
 error conditions:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{package}\NormalTok{ store}
 
 \KeywordTok{import} \StringTok{"errors"}
@@ -3236,13 +3286,11 @@ error conditions:
 \NormalTok{    ErrAlreadyExists }\OperatorTok{=}\NormalTok{ errors}\OperatorTok{.}\NormalTok{New}\OperatorTok{(}\StringTok{"record already exists"}\OperatorTok{)}
 \NormalTok{    ErrInvalidInput  }\OperatorTok{=}\NormalTok{ errors}\OperatorTok{.}\NormalTok{New}\OperatorTok{(}\StringTok{"invalid input"}\OperatorTok{)}
 \OperatorTok{)}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 Callers check for them using \texttt{errors.Is()}:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \NormalTok{metric}\OperatorTok{,}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ store}\OperatorTok{.}\NormalTok{GetByRunID}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{,}\NormalTok{ runID}\OperatorTok{)}
 \ControlFlowTok{if}\NormalTok{ errors}\OperatorTok{.}\NormalTok{Is}\OperatorTok{(}\NormalTok{err}\OperatorTok{,}\NormalTok{ store}\OperatorTok{.}\NormalTok{ErrNotFound}\OperatorTok{)} \OperatorTok{\{}
 \NormalTok{    http}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\NormalTok{w}\OperatorTok{,} \StringTok{"run not found"}\OperatorTok{,}\NormalTok{ http}\OperatorTok{.}\NormalTok{StatusNotFound}\OperatorTok{)}
@@ -3253,8 +3301,7 @@ Callers check for them using \texttt{errors.Is()}:
 \NormalTok{    log}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\StringTok{"get metric"}\OperatorTok{,}\NormalTok{ zap}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\NormalTok{err}\OperatorTok{))}
     \ControlFlowTok{return}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \textbf{Rule:} Use sentinel errors for conditions the caller is expected
 to handle differently. Don't create a sentinel for every possible
@@ -3265,8 +3312,7 @@ failure.
 
 When an error needs to carry structured data for programmatic handling:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// A typed error for HTTP upstream failures in the load generator}
 \KeywordTok{type}\NormalTok{ UpstreamError }\KeywordTok{struct} \OperatorTok{\{}
 \NormalTok{    StatusCode }\DataTypeTok{int}
@@ -3295,8 +3341,7 @@ When an error needs to carry structured data for programmatic handling:
 \NormalTok{        log}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\StringTok{"fatal job error"}\OperatorTok{,}\NormalTok{ zap}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\NormalTok{result}\OperatorTok{.}\NormalTok{Err}\OperatorTok{))}
     \OperatorTok{\}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \texttt{errors.As()} unwraps the error chain to find the first value
 assignable to the target type --- even through multiple layers of
@@ -3311,8 +3356,7 @@ assignable to the target type --- even through multiple layers of
 \texttt{fmt.Errorf} with the \texttt{\%w} verb wraps an error,
 preserving it in a chain:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{func}\NormalTok{ processKafkaEvent}\OperatorTok{(}\NormalTok{msg kafka}\OperatorTok{.}\NormalTok{Message}\OperatorTok{)} \DataTypeTok{error} \OperatorTok{\{}
 \NormalTok{    event}\OperatorTok{,}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ parseEvent}\OperatorTok{(}\NormalTok{msg}\OperatorTok{.}\NormalTok{Value}\OperatorTok{)}
     \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
@@ -3321,8 +3365,7 @@ preserving it in a chain:
     \OperatorTok{\}}
     \ControlFlowTok{return} \OtherTok{nil}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 The resulting error message:
 \texttt{"offset\ 1042\ topic\ archer.metrics:\ json:\ cannot\ unmarshal\ string\ into\ Go\ value\ of\ type\ float64"}
@@ -3342,8 +3385,7 @@ traverse this chain automatically.
 Not every error needs wrapping. Wrapping adds a new string layer. Only
 wrap when you add meaningful context:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// GOOD — adds context about what operation failed and with what input}
 \ControlFlowTok{return}\NormalTok{ fmt}\OperatorTok{.}\NormalTok{Errorf}\OperatorTok{(}\StringTok{"store metric for run \%s: \%w"}\OperatorTok{,}\NormalTok{ runID}\OperatorTok{,}\NormalTok{ err}\OperatorTok{)}
 
@@ -3352,27 +3394,23 @@ wrap when you add meaningful context:
 
 \CommentTok{// GOOD — sentinel error, no wrapping needed}
 \ControlFlowTok{return}\NormalTok{ store}\OperatorTok{.}\NormalTok{ErrNotFound}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \hypertarget{unwrap-chains-and-errors.unwrap}{%
 \subsubsection{\texorpdfstring{3.2 Unwrap Chains and
 \texttt{errors.Unwrap}}{3.2 Unwrap Chains and errors.Unwrap}}\label{unwrap-chains-and-errors.unwrap}}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// errors.Is walks the chain}
 \NormalTok{err }\OperatorTok{:=}\NormalTok{ fmt}\OperatorTok{.}\NormalTok{Errorf}\OperatorTok{(}\StringTok{"layer A: \%w"}\OperatorTok{,}\NormalTok{ fmt}\OperatorTok{.}\NormalTok{Errorf}\OperatorTok{(}\StringTok{"layer B: \%w"}\OperatorTok{,}\NormalTok{ store}\OperatorTok{.}\NormalTok{ErrNotFound}\OperatorTok{))}
 
 \NormalTok{errors}\OperatorTok{.}\NormalTok{Is}\OperatorTok{(}\NormalTok{err}\OperatorTok{,}\NormalTok{ store}\OperatorTok{.}\NormalTok{ErrNotFound}\OperatorTok{)} \CommentTok{// → true}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 Custom error types that wrap other errors implement
 \texttt{Unwrap()\ error}:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{type}\NormalTok{ PipelineError }\KeywordTok{struct} \OperatorTok{\{}
 \NormalTok{    Stage }\DataTypeTok{string}
 \NormalTok{    Cause }\DataTypeTok{error}
@@ -3380,8 +3418,7 @@ Custom error types that wrap other errors implement
 
 \KeywordTok{func} \OperatorTok{(}\NormalTok{e }\OperatorTok{*}\NormalTok{PipelineError}\OperatorTok{)}\NormalTok{ Error}\OperatorTok{()} \DataTypeTok{string}  \OperatorTok{\{} \ControlFlowTok{return}\NormalTok{ fmt}\OperatorTok{.}\NormalTok{Sprintf}\OperatorTok{(}\StringTok{"pipeline stage \%s: \%v"}\OperatorTok{,}\NormalTok{ e}\OperatorTok{.}\NormalTok{Stage}\OperatorTok{,}\NormalTok{ e}\OperatorTok{.}\NormalTok{Cause}\OperatorTok{)} \OperatorTok{\}}
 \KeywordTok{func} \OperatorTok{(}\NormalTok{e }\OperatorTok{*}\NormalTok{PipelineError}\OperatorTok{)}\NormalTok{ Unwrap}\OperatorTok{()} \DataTypeTok{error}  \OperatorTok{\{} \ControlFlowTok{return}\NormalTok{ e}\OperatorTok{.}\NormalTok{Cause }\OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
@@ -3396,8 +3433,7 @@ Loop}\label{the-kafka-consumer-loop}}
 The primary challenge: distinguish transient errors (retry) from
 permanent errors (dead-letter or halt).
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{func} \OperatorTok{(}\NormalTok{c }\OperatorTok{*}\NormalTok{Consumer}\OperatorTok{)}\NormalTok{ Run}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{)} \DataTypeTok{error} \OperatorTok{\{}
     \ControlFlowTok{for} \OperatorTok{\{}
 \NormalTok{        msg}\OperatorTok{,}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ c}\OperatorTok{.}\NormalTok{reader}\OperatorTok{.}\NormalTok{ReadMessage}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{)}
@@ -3428,8 +3464,7 @@ permanent errors (dead-letter or halt).
         \OperatorTok{\}}
     \OperatorTok{\}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \textbf{The critical discipline}: \texttt{context.Canceled} and
 \texttt{context.DeadlineExceeded} are \textbf{not errors} in the
@@ -3440,8 +3475,7 @@ these first.
 \subsubsection{4.2 HTTP Handler Error
 Handling}\label{http-handler-error-handling}}
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// A helper that standardizes error responses and logging}
 \KeywordTok{func}\NormalTok{ writeError}\OperatorTok{(}\NormalTok{w http}\OperatorTok{.}\NormalTok{ResponseWriter}\OperatorTok{,}\NormalTok{ r }\OperatorTok{*}\NormalTok{http}\OperatorTok{.}\NormalTok{Request}\OperatorTok{,}\NormalTok{ logger }\OperatorTok{*}\NormalTok{zap}\OperatorTok{.}\NormalTok{Logger}\OperatorTok{,}\NormalTok{ err }\DataTypeTok{error}\OperatorTok{)} \OperatorTok{\{}
     \KeywordTok{var}\NormalTok{ code }\DataTypeTok{int}
@@ -3478,8 +3512,7 @@ Handling}\label{http-handler-error-handling}}
 \NormalTok{        json}\OperatorTok{.}\NormalTok{NewEncoder}\OperatorTok{(}\NormalTok{w}\OperatorTok{).}\NormalTok{Encode}\OperatorTok{(}\NormalTok{run}\OperatorTok{)}
     \OperatorTok{\}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 The \texttt{writeError} helper means every handler gets consistent error
 serialization, status codes, and logging with zero duplication.
@@ -3491,8 +3524,7 @@ Propagation}\label{worker-pool-error-propagation}}
 In a concurrent worker pool, errors from goroutines must be collected
 and surfaced without losing context:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{func} \OperatorTok{(}\NormalTok{p }\OperatorTok{*}\NormalTok{Pool}\OperatorTok{)}\NormalTok{ RunWithErrors}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ jobs }\OperatorTok{[]}\NormalTok{Job}\OperatorTok{)} \OperatorTok{[]}\DataTypeTok{error} \OperatorTok{\{}
 \NormalTok{    errCh }\OperatorTok{:=} \BuiltInTok{make}\OperatorTok{(}\KeywordTok{chan} \DataTypeTok{error}\OperatorTok{,} \BuiltInTok{len}\OperatorTok{(}\NormalTok{jobs}\OperatorTok{))}
     \KeywordTok{var}\NormalTok{ wg sync}\OperatorTok{.}\NormalTok{WaitGroup}
@@ -3523,14 +3555,12 @@ and surfaced without losing context:
     \OperatorTok{\}}
     \ControlFlowTok{return}\NormalTok{ errs}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 For cases where the \textbf{first} error should cancel all remaining
 work, use \texttt{errgroup}:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{import} \StringTok{"golang.org/x/sync/errgroup"}
 
 \KeywordTok{func}\NormalTok{ runLoadTest}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ jobs }\OperatorTok{[]}\NormalTok{Job}\OperatorTok{)} \DataTypeTok{error} \OperatorTok{\{}
@@ -3546,8 +3576,7 @@ work, use \texttt{errgroup}:
 
     \ControlFlowTok{return}\NormalTok{ g}\OperatorTok{.}\NormalTok{Wait}\OperatorTok{()} \CommentTok{// returns first error; all goroutines finish}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \texttt{errgroup} is the idiomatic Go solution for ``fan-out concurrent
 work where any failure should abort the rest.'' It is used in the ARCHER
@@ -3567,8 +3596,7 @@ In a long-running server, an unrecovered panic in a goroutine crashes
 the entire process. The pattern for HTTP servers is to recover in a
 middleware:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{func}\NormalTok{ RecoverMiddleware}\OperatorTok{(}\NormalTok{logger }\OperatorTok{*}\NormalTok{zap}\OperatorTok{.}\NormalTok{Logger}\OperatorTok{)}\NormalTok{ Middleware }\OperatorTok{\{}
     \ControlFlowTok{return} \KeywordTok{func}\OperatorTok{(}\NormalTok{next http}\OperatorTok{.}\NormalTok{Handler}\OperatorTok{)}\NormalTok{ http}\OperatorTok{.}\NormalTok{Handler }\OperatorTok{\{}
         \ControlFlowTok{return}\NormalTok{ http}\OperatorTok{.}\NormalTok{HandlerFunc}\OperatorTok{(}\KeywordTok{func}\OperatorTok{(}\NormalTok{w http}\OperatorTok{.}\NormalTok{ResponseWriter}\OperatorTok{,}\NormalTok{ r }\OperatorTok{*}\NormalTok{http}\OperatorTok{.}\NormalTok{Request}\OperatorTok{)} \OperatorTok{\{}
@@ -3588,8 +3616,7 @@ middleware:
         \OperatorTok{\})}
     \OperatorTok{\}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \textbf{Rule}: Every goroutine that runs for the lifetime of the process
 (HTTP server, Kafka consumer, WebSocket hub) should have a
@@ -3605,8 +3632,7 @@ Discipline}\label{structured-error-logging-production-discipline}}
 An error string is not enough in production. You need correlation IDs,
 operation names, and structured fields:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// BAD — no context, hard to correlate across services}
 \NormalTok{log}\OperatorTok{.}\NormalTok{Printf}\OperatorTok{(}\StringTok{"error: \%v"}\OperatorTok{,}\NormalTok{ err}\OperatorTok{)}
 
@@ -3618,8 +3644,7 @@ operation names, and structured fields:
 \NormalTok{    zap}\OperatorTok{.}\NormalTok{String}\OperatorTok{(}\StringTok{"topic"}\OperatorTok{,}\NormalTok{ topic}\OperatorTok{),}
 \NormalTok{    zap}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\NormalTok{err}\OperatorTok{),}
 \OperatorTok{)}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 In a telemetry pipeline processing 50k events/second, you need to be
 able to query: ``show me all errors for run X on topic Y in the last 5
@@ -3630,8 +3655,7 @@ minutes.'' Unstructured log strings make that impossible.
 
 Errors should also increment Prometheus counters:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{var} \OperatorTok{(}
 \NormalTok{    kafkaProcessErrors }\OperatorTok{=}\NormalTok{ promauto}\OperatorTok{.}\NormalTok{NewCounterVec}\OperatorTok{(}\NormalTok{prometheus}\OperatorTok{.}\NormalTok{CounterOpts}\OperatorTok{\{}
 \NormalTok{        Name}\OperatorTok{:} \StringTok{"archer\_kafka\_process\_errors\_total"}\OperatorTok{,}
@@ -3652,8 +3676,7 @@ Errors should also increment Prometheus counters:
 
 \CommentTok{// In the consumer loop:}
 \NormalTok{kafkaProcessErrors}\OperatorTok{.}\NormalTok{WithLabelValues}\OperatorTok{(}\NormalTok{topic}\OperatorTok{,}\NormalTok{ classifyError}\OperatorTok{(}\NormalTok{err}\OperatorTok{)).}\NormalTok{Inc}\OperatorTok{()}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 This lets you alert on error rate spikes in Grafana without digging
 through logs.
@@ -3668,8 +3691,7 @@ When context is cancelled (SIGTERM, deadline, parent cancellation),
 operations return errors. Your code must distinguish between ``real
 failure'' and ``expected shutdown'':
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \KeywordTok{func} \OperatorTok{(}\NormalTok{w }\OperatorTok{*}\NormalTok{Worker}\OperatorTok{)}\NormalTok{ sendRequests}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{)} \DataTypeTok{error} \OperatorTok{\{}
     \ControlFlowTok{for} \OperatorTok{\{}
         \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ w}\OperatorTok{.}\NormalTok{sendOne}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{);}\NormalTok{ err }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
@@ -3683,8 +3705,7 @@ failure'' and ``expected shutdown'':
         \OperatorTok{\}}
     \OperatorTok{\}}
 \OperatorTok{\}}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 \texttt{context.Cause(ctx)} (Go 1.21+) returns the cause set by
 \texttt{context.WithCancelCause} --- useful for communicating why a
@@ -3700,8 +3721,7 @@ Documentation}\label{error-contract-documentation}}
 In Go, the error contract of a function is part of its public API.
 Document it:
 
-\begin{Shaded}
-\begin{Highlighting}[]
+\begin{lstlisting}[language=Go]
 \CommentTok{// Save persists a metric to the store.}
 \CommentTok{//}
 \CommentTok{// Returns store.ErrInvalidInput if m.RunID is empty.}
@@ -3709,8 +3729,7 @@ Document it:
 \CommentTok{// Returns a wrapped error for all other failures (database connectivity, etc.).}
 \CommentTok{// Callers should use errors.Is and errors.As to handle known conditions.}
 \KeywordTok{func} \OperatorTok{(}\NormalTok{s }\OperatorTok{*}\NormalTok{PostgresStore}\OperatorTok{)}\NormalTok{ Save}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ m Metric}\OperatorTok{)} \DataTypeTok{error}
-\end{Highlighting}
-\end{Shaded}
+\end{lstlisting}
 
 This is the discipline that makes Go APIs predictable at scale. Callers
 know exactly which error conditions to handle explicitly and which to
