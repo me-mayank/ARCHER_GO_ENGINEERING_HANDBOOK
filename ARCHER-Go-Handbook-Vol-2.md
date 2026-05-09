@@ -1,53 +1,1410 @@
 # ARCHER Go Engineering Handbook
-## Volume II — API Layer, Messaging & Observability
 
-### Distributed Systems & Backend Engineering Playbook
+## Volume 2
+
+### Concurrency, Workers, and Realtime Backend Systems
+
 #### Mayank Tripathi
 
 ---
 
-> *Volume II of III — This volume builds the production API layer, real-time communication, event streaming, container-aware deployment, telemetry pipelines, and the operational configuration layer of the ARCHER distributed benchmarking platform.*
+> *Volume 2 of 4 — The ARCHER Go Engineering Handbook Series*
+>
+> *A production-grade distributed systems engineering curriculum for backend engineers building infrastructure in Go.*
 
 ---
 
-## Volume Overview
+## Preface — Volume 2
 
-**Volume II** applies the foundations from Volume I to construct the full ARCHER backend surface: the HTTP API server, WebSocket push infrastructure, Kafka-based event pipeline, Docker-aware binary construction, telemetry ingestion pipeline, and the logging and configuration architecture that makes it all operable.
+Volume 1 established the mental models. Volume 2 builds the systems.
 
-By the end of this volume, you will be able to build a production-grade REST API with middleware chains and graceful drain, manage real-time bidirectional connections via WebSocket with the Hub pattern, produce and consume from Kafka with at-least-once delivery and DLQ semantics, construct minimal Docker images from scratch, assemble a dual-path telemetry pipeline (Kafka + WebSocket), and manage structured logging with dynamic level control and three-source config priority.
+Concurrent communication, worker orchestration, and real-time data delivery are not advanced topics in distributed systems engineering — they are table stakes. A load generator that cannot sustain 50k concurrent requests per second, a WebSocket hub that drops connections under load, or an API server that blocks indefinitely on a slow client are not production systems. They are prototypes that happen to work in demos.
+
+This volume is about the gap between prototype and production. It covers the full channel taxonomy — pipelines, fan-out, fan-in, hubs, semaphores — and explains when each pattern is correct and when it becomes a bottleneck. It builds the bounded-concurrency worker pool that drives the ARCHER load generator, including rate limiting, telemetry instrumentation, and graceful drain. It then applies the context package — Go's unified cancellation, deadline, and request-scoping mechanism — to tie worker lifecycle to service lifecycle. Finally, it constructs a production-grade REST API server with a middleware chain, health probes, and Prometheus instrumentation, and completes the real-time path with the WebSocket Hub pattern.
+
+By the end of Volume 2, you will be able to design and build the complete frontend communication surface of a distributed backend platform: concurrent job execution, context-governed cancellation, REST API with proper timeout and drain semantics, and WebSocket real-time push.
 
 **Chapters in this volume:**
 
-| Chapter | Title | Core Concept |
-|---------|-------|--------------|
-| 08 | Context Package and Graceful Cancellation | Context tree, signal handling, propagation |
-| 09 | Building REST APIs in Go | ServeMux, middleware, handlers, health probes |
-| 10 | WebSocket Systems in Go | Hub pattern, read/write pumps, ping/pong |
-| 11 | Kafka Integration and Event-Driven Systems | Producer/consumer, DLQ, batching, consumer groups |
-| 12 | Docker-Aware Backend Design in Go | Multi-stage build, GOMAXPROCS, GOMEMLIMIT, K8s lifecycle |
-| 13 | Telemetry Pipelines and Concurrent Metrics Processing | Single-goroutine collector, dual-path publish, sliding window |
-| 14 | Logging, Configuration, and Environment Management | Zap, atomic level, three-source config, secrets |
+| Chapter | Title | Systems Concept |
+|---------|-------|-----------------|
+| 06 | Channels and Communication Patterns | Pipeline, fan-out/in, hub, semaphore, `select`, backpressure |
+| 07 | Worker Pools and Concurrent Job Systems | Bounded concurrency, rate limiting, telemetry, graceful drain |
+| 08 | Context Package and Graceful Cancellation | Context tree, signal handling, propagation, shutdown contract |
+| 09 | Building REST APIs in Go | ServeMux, middleware chain, handlers, health probes, Prometheus |
+| 10 | WebSocket Systems in Go | Hub pattern, read/write pumps, ping/pong, run-scoped broadcast |
 
-**Prerequisite:** Volume I (Chapters 1–7) or equivalent Go concurrency and interface knowledge.
-
-**Companion volumes:**
-- *Volume I* — Foundations & Core Systems (Chapters 1–7)
-- *Volume III* — Shutdown, Advanced Concurrency, Background Workers, Real-Time Systems, Architecture Synthesis, Production Mindset (Chapters 15–20)
+**Companion volumes in this series:**
+- *Volume 1* — Foundations of Go Systems Engineering (Chapters 1–5)
+- *Volume 3* — Distributed Communication, Telemetry, and Infrastructure Systems (Chapters 11–15)
+- *Volume 4* — High-Performance Distributed Architecture and Production Engineering (Chapters 16–20)
 
 ---
 
-## Table of Contents — Volume II
+## Table of Contents — Volume 2
 
+6. [Channels and Communication Patterns](#chapter-06--channels-and-communication-patterns)
+7. [Worker Pools and Concurrent Job Systems](#chapter-07--worker-pools-and-concurrent-job-systems)
 8. [Context Package and Graceful Cancellation](#chapter-08--context-package-and-graceful-cancellation)
 9. [Building REST APIs in Go](#chapter-09--building-rest-apis-in-go)
 10. [WebSocket Systems in Go](#chapter-10--websocket-systems-in-go)
-11. [Kafka Integration and Event-Driven Systems in Go](#chapter-11--kafka-integration-and-event-driven-systems-in-go)
-12. [Docker-Aware Backend Design in Go](#chapter-12--docker-aware-backend-design-in-go)
-13. [Telemetry Pipelines and Concurrent Metrics Processing](#chapter-13--telemetry-pipelines-and-concurrent-metrics-processing)
-14. [Logging, Configuration, and Environment Management](#chapter-14--logging-configuration-and-environment-management)
 
 ---
 
+
+
+---
+
+# Chapter 06 — Channels and Communication Patterns
+
+> **Engineering Learning Booklet | ARCHER Backend Architecture Series**
+> *Channels are not just queues — they are the synchronization, ownership transfer, and coordination primitive of Go's concurrency model.*
+
+---
+
+## 1. What Channels Actually Are
+
+A channel is a typed, goroutine-safe conduit for sending values between goroutines. It provides both **data transfer** and **synchronization** in a single primitive.
+
+```go
+ch := make(chan MetricEvent)       // unbuffered
+ch := make(chan MetricEvent, 1000) // buffered, capacity 1000
+```
+
+Channels have direction — and direction matters architecturally:
+
+```go
+func producer(out chan<- MetricEvent) { out <- event }  // send-only
+func consumer(in <-chan MetricEvent)  { event := <-in } // receive-only
+func pipe(in <-chan MetricEvent, out chan<- MetricEvent) // both
+```
+
+Directional channel types are enforced by the compiler. Passing `chan<-` to a consumer guarantees it can never close the channel from the wrong end or read from it — this is compile-time API contract enforcement.
+
+---
+
+## 2. Buffered vs Unbuffered — The Design Decision
+
+### 2.1 Unbuffered Channels — Synchronous Rendezvous
+
+An unbuffered channel (`make(chan T)`) blocks the sender until a receiver is ready, and blocks the receiver until a sender is ready. Both goroutines synchronize at the exchange point.
+
+```go
+sync := make(chan struct{})
+
+go func() {
+    doWork()
+    sync <- struct{}{} // blocks until main receives
+}()
+
+<-sync // blocks until goroutine sends
+fmt.Println("work done")
+```
+
+Use unbuffered channels when you need **guaranteed handoff** — the sender must know the receiver has taken the value before continuing. This is the right model for signal passing (done signals, shutdown notifications) and pipeline stages where backpressure must propagate upstream.
+
+### 2.2 Buffered Channels — Decoupling Producer and Consumer Speed
+
+A buffered channel allows the sender to continue up to `cap` sends without a receiver ready. Only when the buffer is full does the sender block.
+
+```go
+events := make(chan MetricEvent, 1000)
+
+// Producer can send up to 1000 events without blocking
+go func() {
+    for _, e := range batch {
+        events <- e // only blocks if 1000 events are pending
+    }
+    close(events)
+}()
+
+// Consumer processes at its own pace
+for e := range events {
+    store.Save(ctx, e)
+}
+```
+
+**Buffer sizing is a capacity decision, not a correctness decision.** A buffer of zero is functionally correct — the producer will just block more often. Buffer size is a performance and decoupling tuning parameter.
+
+For ARCHER's telemetry pipeline:
+- Buffer too small → producer (load generator) blocks, throughput drops
+- Buffer too large → memory grows under load spike, crash risk
+- Buffer correctly sized → absorbs burst while keeping average consumer speed
+
+### 2.3 How to Size Buffers
+
+```
+Buffer = Peak Burst Rate × Expected Processing Lag
+```
+
+For a telemetry pipeline expecting 10k events/second bursts and a consumer processing lag of 200ms:
+
+```
+Buffer = 10,000 events/s × 0.2s = 2,000 events
+```
+
+Round up to the next power of two: `make(chan MetricEvent, 2048)`
+
+Monitor channel backpressure with `len(ch)` — expose it as a gauge metric. If `len(ch)` consistently approaches `cap(ch)`, your consumer is too slow or your buffer is too small.
+
+---
+
+## 3. Channel Closing and Range
+
+**Only the sender closes a channel.** The receiver never closes. Closing from the receiver side panics.
+
+```go
+// Correct pattern: sender closes
+func produce(out chan<- Job, jobs []Job) {
+    defer close(out) // closed when function returns
+    for _, j := range jobs {
+        out <- j
+    }
+}
+
+// Receiver uses range — exits when channel is closed
+func consume(in <-chan Job) {
+    for job := range in { // range exits when in is closed and drained
+        process(job)
+    }
+}
+```
+
+**The zero value on a closed channel:** Receiving from a closed channel immediately returns the zero value for the type and `false`:
+
+```go
+val, ok := <-ch
+if !ok {
+    // channel closed and drained
+    return
+}
+```
+
+**Sending to a closed channel panics.** This is a programming error, not an operational error. Design your goroutine lifecycle so the sender is always the one who closes.
+
+### 3.1 The Multiple-Producer Close Problem
+
+When multiple goroutines send to the same channel, only one can close it. Use a `sync.WaitGroup` to know when all producers are done:
+
+```go
+func multiProducer(out chan<- MetricEvent, sources []EventSource) {
+    var wg sync.WaitGroup
+    for _, src := range sources {
+        src := src
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for _, e := range src.Events() {
+                out <- e
+            }
+        }()
+    }
+    // Separate goroutine closes after all producers finish
+    go func() {
+        wg.Wait()
+        close(out)
+    }()
+}
+```
+
+---
+
+## 4. `select` — Multiplexing Channels
+
+`select` is Go's mechanism for waiting on multiple channel operations simultaneously. It is the heart of concurrent Go programs.
+
+```go
+select {
+case msg := <-kafkaIn:
+    // received a Kafka message
+case result := <-workerOut:
+    // received a worker result
+case <-ticker.C:
+    // periodic flush
+case <-ctx.Done():
+    // shutdown signal
+}
+```
+
+If multiple cases are ready simultaneously, `select` picks one **uniformly at random**. This prevents starvation in pipelines where one channel is always busy.
+
+### 4.1 Non-Blocking Channel Operations
+
+```go
+// Try to send without blocking
+select {
+case resultCh <- result:
+    // sent
+default:
+    // channel full — drop or handle backpressure
+    metrics.DroppedResults.Inc()
+}
+
+// Try to receive without blocking
+select {
+case job := <-jobCh:
+    process(job)
+default:
+    // no job ready — idle
+}
+```
+
+Use default sparingly. In most pipelines, blocking on a full channel is **intentional backpressure** — the default case bypasses it.
+
+### 4.2 Timeout on Channel Operations
+
+```go
+select {
+case result := <-resultCh:
+    return result, nil
+case <-time.After(5 * time.Second):
+    return Result{}, fmt.Errorf("worker timeout after 5s")
+case <-ctx.Done():
+    return Result{}, ctx.Err()
+}
+```
+
+**Note:** `time.After` allocates a new timer on every call and leaks it until it fires. In high-throughput hot paths, use `time.NewTimer` and reset it:
+
+```go
+timer := time.NewTimer(5 * time.Second)
+defer timer.Stop()
+select {
+case result := <-resultCh:
+    return result, nil
+case <-timer.C:
+    return Result{}, fmt.Errorf("timeout")
+case <-ctx.Done():
+    return Result{}, ctx.Err()
+}
+```
+
+---
+
+## 5. Core Communication Patterns
+
+### 5.1 Pipeline Pattern
+
+Data flows through a series of transformation stages, each connected by channels:
+
+```go
+// Stage 1: read raw bytes from Kafka
+func readKafka(ctx context.Context, reader *kafka.Reader) <-chan []byte {
+    out := make(chan []byte, 256)
+    go func() {
+        defer close(out)
+        for {
+            msg, err := reader.ReadMessage(ctx)
+            if err != nil {
+                if ctx.Err() != nil {
+                    return
+                }
+                continue
+            }
+            select {
+            case out <- msg.Value:
+            case <-ctx.Done():
+                return
+            }
+        }
+    }()
+    return out
+}
+
+// Stage 2: parse raw bytes into events
+func parseEvents(ctx context.Context, raw <-chan []byte) <-chan MetricEvent {
+    out := make(chan MetricEvent, 256)
+    go func() {
+        defer close(out)
+        for bytes := range raw {
+            var e MetricEvent
+            if err := json.Unmarshal(bytes, &e); err != nil {
+                continue // skip malformed
+            }
+            select {
+            case out <- e:
+            case <-ctx.Done():
+                return
+            }
+        }
+    }()
+    return out
+}
+
+// Stage 3: store events
+func storeEvents(ctx context.Context, events <-chan MetricEvent, store MetricStore) {
+    for e := range events {
+        if err := store.Save(ctx, e); err != nil {
+            log.Error("store failed", zap.Error(err))
+        }
+    }
+}
+
+// Assembly in main:
+raw := readKafka(ctx, reader)
+events := parseEvents(ctx, raw)
+storeEvents(ctx, events, metricStore)
+```
+
+Each stage is independent, testable, and can be replaced. Closing the first channel propagates shutdown through the entire pipeline naturally.
+
+### 5.2 Fan-Out Pattern
+
+One channel distributing work to N workers:
+
+```go
+func fanOut(ctx context.Context, in <-chan Job, workers int) []<-chan Result {
+    outputs := make([]<-chan Result, workers)
+    for i := 0; i < workers; i++ {
+        out := make(chan Result, 64)
+        outputs[i] = out
+        go func(out chan<- Result) {
+            defer close(out)
+            for job := range in {
+                select {
+                case out <- job.Execute(ctx):
+                case <-ctx.Done():
+                    return
+                }
+            }
+        }(out)
+    }
+    return outputs
+}
+```
+
+### 5.3 Fan-In Pattern (Merge)
+
+Merge N channels into one:
+
+```go
+func fanIn(ctx context.Context, channels ...<-chan Result) <-chan Result {
+    merged := make(chan Result, 256)
+    var wg sync.WaitGroup
+
+    pipe := func(ch <-chan Result) {
+        defer wg.Done()
+        for result := range ch {
+            select {
+            case merged <- result:
+            case <-ctx.Done():
+                return
+            }
+        }
+    }
+
+    wg.Add(len(channels))
+    for _, ch := range channels {
+        go pipe(ch)
+    }
+
+    go func() {
+        wg.Wait()
+        close(merged)
+    }()
+
+    return merged
+}
+
+// Combined: fan-out to 10 workers, fan-in results
+outputs := fanOut(ctx, jobCh, 10)
+results := fanIn(ctx, outputs...)
+for r := range results {
+    aggregate(r)
+}
+```
+
+### 5.4 Done Channel Pattern (Broadcast Shutdown)
+
+A single close broadcasts shutdown to N goroutines simultaneously:
+
+```go
+// Close a done channel to signal all listeners
+done := make(chan struct{})
+
+// All workers listen on the same done channel
+for i := 0; i < 100; i++ {
+    go func() {
+        select {
+        case <-done:
+            return // all 100 goroutines exit simultaneously
+        case job := <-jobCh:
+            process(job)
+        }
+    }()
+}
+
+// Broadcast shutdown to all 100 goroutines at once
+close(done)
+```
+
+Unlike sending a value (which wakes only one receiver), **closing a channel wakes all receivers simultaneously**. This is the canonical Go broadcast signal.
+
+`context.Context.Done()` returns a channel that is closed on cancellation — it is this exact pattern used throughout the standard library.
+
+### 5.5 Semaphore Pattern (Bounded Concurrency)
+
+```go
+// Limit concurrent HTTP requests to 50
+sem := make(chan struct{}, 50)
+
+for _, url := range urls {
+    url := url
+    sem <- struct{}{} // acquire (blocks when 50 in-flight)
+    go func() {
+        defer func() { <-sem }() // release
+        sendRequest(ctx, url)
+    }()
+}
+```
+
+The buffered channel acts as a counting semaphore — a fundamentally useful pattern for rate limiting and resource bounding in load generators.
+
+### 5.6 The Or-Done Pattern
+
+Wrap any channel to respect context cancellation:
+
+```go
+// orDone wraps a channel to exit when ctx is done
+func orDone[T any](ctx context.Context, ch <-chan T) <-chan T {
+    out := make(chan T)
+    go func() {
+        defer close(out)
+        for {
+            select {
+            case <-ctx.Done():
+                return
+            case v, ok := <-ch:
+                if !ok {
+                    return
+                }
+                select {
+                case out <- v:
+                case <-ctx.Done():
+                    return
+                }
+            }
+        }
+    }()
+    return out
+}
+
+// Now you can range over any channel safely with context
+for event := range orDone(ctx, kafkaEvents) {
+    process(event)
+}
+```
+
+---
+
+## 6. The WebSocket Hub Pattern
+
+The WebSocket hub is the canonical channel-based broadcast architecture in Go. Each client has a goroutine for reading and one for writing. The hub owns the subscriber map and receives broadcast requests via a channel.
+
+```go
+type Hub struct {
+    clients    map[*Client]bool
+    broadcast  chan []byte
+    register   chan *Client
+    unregister chan *Client
+}
+
+func NewHub() *Hub {
+    return &Hub{
+        broadcast:  make(chan []byte, 256),
+        register:   make(chan *Client),
+        unregister: make(chan *Client),
+        clients:    make(map[*Client]bool),
+    }
+}
+
+// Run owns the clients map — no mutex needed
+func (h *Hub) Run(ctx context.Context) {
+    for {
+        select {
+        case <-ctx.Done():
+            for client := range h.clients {
+                close(client.send)
+            }
+            return
+
+        case client := <-h.register:
+            h.clients[client] = true
+
+        case client := <-h.unregister:
+            if _, ok := h.clients[client]; ok {
+                delete(h.clients, client)
+                close(client.send)
+            }
+
+        case message := <-h.broadcast:
+            for client := range h.clients {
+                select {
+                case client.send <- message:
+                default:
+                    // Client's send buffer full — drop and unregister
+                    delete(h.clients, client)
+                    close(client.send)
+                }
+            }
+        }
+    }
+}
+```
+
+The hub goroutine **exclusively owns** the `clients` map — it is only ever accessed in the `select` arms. No mutex is needed because no other goroutine touches `clients`. This is the CSP ownership model from Chapter 1 at production scale.
+
+---
+
+## 7. Channel Anti-Patterns
+
+### 7.1 Leaking Goroutines via Abandoned Channels
+
+```go
+// LEAK: nobody reads from resultCh after the function returns
+func startJobs(jobs []Job) {
+    resultCh := make(chan Result)
+    for _, j := range jobs {
+        go func(j Job) { resultCh <- j.Execute(ctx) }(j) // all block forever
+    }
+    // function returns — resultCh is abandoned, goroutines blocked forever
+}
+
+// FIX: buffer or guarantee a receiver
+resultCh := make(chan Result, len(jobs)) // buffered — goroutines never block
+```
+
+### 7.2 Closing a Nil Channel (Panic)
+
+```go
+var ch chan struct{} // nil channel
+close(ch)           // panic: close of nil channel
+
+// Always initialize before use
+ch = make(chan struct{})
+```
+
+Sending to or receiving from a nil channel blocks forever — not a panic, but a deadlock. Closing a nil channel is a panic.
+
+### 7.3 Receiving from a Closed Channel Without Checking `ok`
+
+```go
+// Silently processes zero values after channel is closed
+for {
+    val := <-ch // returns zero value forever when ch is closed
+    process(val)
+}
+
+// Correct:
+for val := range ch { // exits when closed and drained
+    process(val)
+}
+```
+
+### 7.4 Using Channels Where Mutexes Are Simpler
+
+Channels are not a replacement for all synchronization. For simple shared counters, `sync/atomic` is cleaner and faster:
+
+```go
+// Overkill — a goroutine and channel for a counter
+counterCh := make(chan int, 1)
+counterCh <- 0
+go func() { /* manages counter via channel */ }()
+
+// Correct tool for the job
+var counter atomic.Int64
+counter.Add(1)
+n := counter.Load()
+```
+
+Use channels for **goroutine coordination and data transfer**. Use mutexes and atomics for **shared state protection**.
+
+---
+
+## 8. Channel Performance Characteristics
+
+| Operation | Approximate Cost |
+|---|---|
+| Unbuffered channel send/recv (synchronized) | ~200–300 ns |
+| Buffered channel send (not full) | ~50–100 ns |
+| Buffered channel recv (not empty) | ~50–100 ns |
+| `sync/atomic` read/write | ~5–20 ns |
+| `sync.Mutex` Lock/Unlock (uncontended) | ~20–50 ns |
+
+For a telemetry pipeline processing 100k events/second, channel overhead is ~10ms of latency budget per 100k sends — negligible. For a hot inner loop doing millions of operations/second, prefer atomics.
+
+---
+
+## Key Takeaways
+
+1. **Channels transfer ownership** — the sender owns the value until it sends, the receiver owns it after.
+2. **Only senders close channels** — receivers never close; they check `ok` or use `range`.
+3. **Closing broadcasts shutdown** — one `close(done)` wakes all goroutines blocked on `<-done`.
+4. **Buffer size is a performance tuning decision**, not a correctness decision.
+5. **Pipeline, fan-out, fan-in, semaphore** are the four load generator patterns in ARCHER.
+6. **The Hub pattern** (single goroutine owns mutable state, channels carry messages) eliminates mutexes on complex shared state.
+7. **Channels for coordination; atomics/mutexes for shared state** — use the right tool.
+
+---
+
+## Common Production Pitfalls
+
+| Pitfall | Consequence | Correct Approach |
+|---|---|---|
+| Goroutine blocked on send to full buffered channel | Goroutine leak | Size buffer correctly; use `select` + `default` for optional sends |
+| Closing channel from receiver | Panic | Only sender closes |
+| Nil channel operations | Deadlock (send/recv) or panic (close) | Always initialize; guard nil checks |
+| Receiving without `ok` from closed channel | Infinite loop on zero values | Use `range` or check `ok` |
+| `time.After` in hot `select` loops | Timer leak and allocation pressure | Use `time.NewTimer` with `Stop()` and `Reset()` |
+| Channel as mutex replacement for simple counters | Goroutine overhead for no benefit | Use `sync/atomic` or `sync.Mutex` |
+
+---
+
+## Production Checklist
+
+- [ ] All channel directions typed at function boundaries (`chan<-`, `<-chan`)
+- [ ] Buffer sizes documented with the capacity calculation rationale
+- [ ] `len(ch)` exposed as a Prometheus gauge for backpressure monitoring
+- [ ] `time.After` replaced with `time.NewTimer` in loops
+- [ ] WebSocket hub uses single-goroutine ownership model (no map mutex)
+- [ ] Fan-out/fan-in pattern for load generator concurrency
+- [ ] `orDone` wrapper used for channels that must respect context cancellation
+- [ ] No goroutine starts without a corresponding exit path documented
+
+---
+
+## Mini Backend Exercise
+
+**Task:** Implement a 3-stage pipeline for the ARCHER telemetry path:
+1. `Stage 1` — reads `[]byte` from a slice (simulate Kafka), sends to channel
+2. `Stage 2` — parses JSON into `MetricEvent`, sends to channel
+3. `Stage 3` — aggregates events into `map[string]int` (count per status code)
+4. Wire all three with channels, use `context.WithTimeout` to shut down after 500ms
+5. Verify with `-race`
+
+---
+
+## Concurrency Exercise
+
+**Task:** Build a `BroadcastHub` that:
+1. Accepts subscriber `Register(ch chan<- string)` and `Unregister(ch chan<- string)` calls
+2. Accepts `Broadcast(msg string)` that sends to all subscribers
+3. If a subscriber's channel is full, drop the message (non-blocking send)
+4. Runs as a single goroutine (`Run(ctx context.Context)`) — no mutexes on the subscriber map
+5. Test with 10 subscribers, 1 broadcaster, 1000 messages
+
+---
+
+## Systems-Oriented Exercise
+
+Design the complete channel topology for the ARCHER load generator:
+1. Job source → fan-out (N workers) → fan-in → result aggregator
+2. Add a semaphore channel limiting concurrency to a configured max
+3. Add a context-driven shutdown that drains in-flight results before exiting
+4. Identify which goroutines need `select` with `ctx.Done()` and which can use `range`
+
+---
+
+## How This Maps to the ARCHER Architecture
+
+| ARCHER Component | Channel Pattern |
+|---|---|
+| Load Generator | Fan-out (jobs → workers) + Fan-in (results → aggregator) + Semaphore (concurrency limit) |
+| Telemetry Pipeline | Linear pipeline (Kafka bytes → parse → store) |
+| WebSocket Hub | Hub pattern (register/unregister/broadcast channels) |
+| Worker Orchestrator | Done channel for shutdown broadcast; result channel for collection |
+| Kafka Consumer | orDone wrapper; per-message processing inline |
+| API → Dashboard | Broadcast channel from metric aggregator to WebSocket hub |
+
+---
+
+## What Actually Matters for the Hackathon
+
+- The Hub pattern eliminates the hardest concurrency bug in WebSocket servers (concurrent map writes)
+- Pipeline pattern makes telemetry ingestion testable stage-by-stage without a running Kafka
+- Semaphore channel is 3 lines and gives you precise concurrency control in the load generator
+- Buffered channels with `len(ch)` monitoring give you real-time backpressure visibility
+
+---
+
+## What Can Be Ignored for Now
+
+- `reflect.Select` for dynamic channel selection — only needed for building frameworks
+- `golang.org/x/sync/singleflight` — useful for cache stampede prevention; not needed in MVP
+- Lock-free ring buffers — premature optimization; buffered channels are sufficient
+- LMAX Disruptor patterns — relevant at 10M+ events/second; not ARCHER's scale
+
+---
+
+*Next chapter: Worker Pools and Concurrent Job Systems — composing the goroutine and channel primitives from Chapters 5 and 6 into production-grade job execution infrastructure.*
+
+
+---
+
+# Chapter 07 — Worker Pools and Concurrent Job Systems
+
+> **Engineering Learning Booklet | ARCHER Backend Architecture Series**
+> *Composing goroutines, channels, and interfaces into production-grade concurrent job execution infrastructure.*
+
+---
+
+## 1. Why Worker Pools Exist
+
+The naive approach to concurrent execution is to spawn a goroutine per job. For 10 jobs this works fine. For 100,000 simultaneous HTTP requests against a single target, it causes:
+
+- **Socket exhaustion** — the OS has a limit on open file descriptors (typically 65k)
+- **Target overload** — the benchmarked service sees a thundering herd, not realistic load
+- **Uncontrolled memory growth** — 100k goroutines × 2KB each = 200MB at minimum, growing with stack depth
+- **CPU thrashing** — scheduler overhead from context switching 100k goroutines across `GOMAXPROCS` threads
+
+A **worker pool** bounds concurrency to a fixed number of goroutines, processes an unbounded job queue through that fixed pool, and provides lifecycle management (start, drain, shutdown) for the entire system. It is the foundational primitive for every load generator, background job processor, and event pipeline in ARCHER.
+
+---
+
+## 2. The Minimal Worker Pool
+
+Building up from first principles:
+
+```go
+// pkg/loadgen/pool.go
+package loadgen
+
+import (
+    "context"
+    "sync"
+)
+
+// Job is any unit of executable work — defined in Chapter 3.
+type Job interface {
+    Execute(ctx context.Context) Result
+    ID() string
+}
+
+type Result struct {
+    JobID   string
+    Err     error
+    Payload any
+}
+
+// Pool runs a fixed number of worker goroutines draining a job channel.
+type Pool struct {
+    concurrency int
+    jobs        chan Job
+    results     chan Result
+    wg          sync.WaitGroup
+}
+
+func NewPool(concurrency, bufferSize int) *Pool {
+    return &Pool{
+        concurrency: concurrency,
+        jobs:        make(chan Job, bufferSize),
+        results:     make(chan Result, bufferSize),
+    }
+}
+
+// Start launches worker goroutines. Call before submitting jobs.
+func (p *Pool) Start(ctx context.Context) {
+    for i := 0; i < p.concurrency; i++ {
+        p.wg.Add(1)
+        go func() {
+            defer p.wg.Done()
+            for {
+                select {
+                case <-ctx.Done():
+                    return
+                case job, ok := <-p.jobs:
+                    if !ok {
+                        return
+                    }
+                    p.results <- job.Execute(ctx)
+                }
+            }
+        }()
+    }
+}
+
+// Submit sends a job into the pool. Blocks if job buffer is full.
+func (p *Pool) Submit(job Job) {
+    p.jobs <- job
+}
+
+// Close signals no more jobs. Workers drain and exit.
+func (p *Pool) Close() {
+    close(p.jobs)
+}
+
+// Wait blocks until all workers have exited, then closes results.
+func (p *Pool) Wait() {
+    p.wg.Wait()
+    close(p.results)
+}
+
+// Results returns the result channel for consumption.
+func (p *Pool) Results() <-chan Result {
+    return p.results
+}
+```
+
+Usage pattern:
+
+```go
+pool := NewPool(50, 1000) // 50 workers, 1000-job buffer
+pool.Start(ctx)
+
+// Submit in a goroutine so we don't block before reading results
+go func() {
+    for _, job := range jobs {
+        pool.Submit(job)
+    }
+    pool.Close() // signal end of jobs
+}()
+
+// Drain results
+go func() {
+    pool.Wait() // blocks until all workers done, then closes results
+}()
+
+for result := range pool.Results() {
+    aggregate(result)
+}
+```
+
+---
+
+## 3. Lifecycle Management — The Full State Machine
+
+A production worker pool has four states: **Idle → Running → Draining → Stopped**.
+
+```
+NewPool()          Start(ctx)         Close()            Wait()
+   │                  │                  │                  │
+[Idle] ──────────► [Running] ────────► [Draining] ──────► [Stopped]
+                      │                  │
+                   Submit(job)       No new jobs accepted
+                   Results() readable  Remaining jobs complete
+```
+
+Critical discipline:
+- `Start()` before any `Submit()`
+- `Close()` after all `Submit()` calls — signals "no more jobs"
+- `Wait()` after `Close()` — blocks until all workers drain
+- `Results()` channel readable **throughout** (buffered) and closed only after `Wait()`
+
+Violating this order causes either deadlock (submit to closed channel panics) or missing results (reading results before workers finish).
+
+---
+
+## 4. The Load Generator Worker Pool
+
+The ARCHER load generator needs more than a basic pool. It needs:
+
+1. **Rate limiting** — send at most N requests/second
+2. **Ramp-up** — gradually increase load from 0 to target concurrency
+3. **Real-time metrics** — emit results as they arrive, not after all complete
+4. **Context cancellation** — stop immediately on SIGTERM or run expiry
+
+```go
+// internal/loadgen/runner.go
+package loadgen
+
+import (
+    "context"
+    "sync"
+    "time"
+    "golang.org/x/time/rate"
+)
+
+type RunConfig struct {
+    Concurrency int
+    Duration    time.Duration
+    RatePerSec  int           // 0 = unlimited
+    Target      string
+}
+
+type Runner struct {
+    cfg     RunConfig
+    pool    *Pool
+    limiter *rate.Limiter
+    metrics *MetricAccumulator // from Chapter 3
+}
+
+func NewRunner(cfg RunConfig) *Runner {
+    var lim *rate.Limiter
+    if cfg.RatePerSec > 0 {
+        lim = rate.NewLimiter(rate.Limit(cfg.RatePerSec), cfg.RatePerSec)
+    }
+    return &Runner{
+        cfg:     cfg,
+        pool:    NewPool(cfg.Concurrency, cfg.Concurrency*2),
+        limiter: lim,
+        metrics: NewMetricAccumulator(),
+    }
+}
+
+func (r *Runner) Run(ctx context.Context) (*RunReport, error) {
+    // Bound run by duration
+    runCtx, cancel := context.WithTimeout(ctx, r.cfg.Duration)
+    defer cancel()
+
+    r.pool.Start(runCtx)
+
+    // Job feeder goroutine
+    go func() {
+        defer r.pool.Close()
+        for {
+            if runCtx.Err() != nil {
+                return
+            }
+            // Rate limit if configured
+            if r.limiter != nil {
+                if err := r.limiter.Wait(runCtx); err != nil {
+                    return
+                }
+            }
+            r.pool.Submit(&HTTPJob{
+                id:     newJobID(),
+                url:    r.cfg.Target,
+                client: sharedHTTPClient,
+            })
+        }
+    }()
+
+    // Result collector goroutine
+    var wg sync.WaitGroup
+    wg.Add(1)
+    go func() {
+        defer wg.Done()
+        r.pool.Wait()
+    }()
+
+    for result := range r.pool.Results() {
+        r.metrics.Record(result)
+    }
+
+    wg.Wait()
+    return r.metrics.Report(), nil
+}
+```
+
+**Key design decisions:**
+- `context.WithTimeout` bounds the run — even if the job feeder loops indefinitely, the pool's `ctx.Done()` exits workers
+- The job feeder closes the pool's job channel when done — workers drain remaining buffered jobs
+- Rate limiter (`golang.org/x/time/rate`) applies token bucket algorithm — industry standard for load control
+- Results are streamed in real-time to the accumulator, not batched at the end
+
+---
+
+## 5. The Metric Accumulator (Revisited from Chapter 3)
+
+In the context of a worker pool producing results at high frequency, the accumulator must be lock-efficient:
+
+```go
+// internal/loadgen/accumulator.go
+type MetricAccumulator struct {
+    mu        sync.Mutex
+    latencies []time.Duration
+    counts    map[int]int64
+    errors    atomic.Int64
+    total     atomic.Int64
+}
+
+func (a *MetricAccumulator) Record(r Result) {
+    a.total.Add(1)
+
+    var res HTTPResult
+    if r.Err != nil {
+        a.errors.Add(1)
+        return
+    }
+    res = r.Payload.(HTTPResult)
+
+    a.mu.Lock()
+    a.latencies = append(a.latencies, res.Latency)
+    a.counts[res.StatusCode]++
+    a.mu.Unlock()
+}
+
+func (a *MetricAccumulator) Report() *RunReport {
+    a.mu.Lock()
+    lats := make([]time.Duration, len(a.latencies))
+    copy(lats, a.latencies)
+    counts := maps.Clone(a.counts)
+    a.mu.Unlock()
+
+    sort.Slice(lats, func(i, j int) bool { return lats[i] < lats[j] })
+
+    return &RunReport{
+        Total:    a.total.Load(),
+        Errors:   a.errors.Load(),
+        P50:      percentile(lats, 0.50),
+        P95:      percentile(lats, 0.95),
+        P99:      percentile(lats, 0.99),
+        Max:      lats[len(lats)-1],
+        Counts:   counts,
+    }
+}
+
+func percentile(sorted []time.Duration, p float64) time.Duration {
+    if len(sorted) == 0 {
+        return 0
+    }
+    idx := int(float64(len(sorted)) * p)
+    if idx >= len(sorted) {
+        idx = len(sorted) - 1
+    }
+    return sorted[idx]
+}
+```
+
+The mutex only covers the append and map update — atomics handle the simple counters without lock overhead. The report takes a full copy before sorting, keeping the lock duration short.
+
+---
+
+## 6. The Generic Worker Pool (Go 1.18+)
+
+With generics, the pool becomes type-safe without the `any` type assertion on results:
+
+```go
+// pkg/pool/pool.go — generic, reusable across ARCHER services
+package pool
+
+import (
+    "context"
+    "sync"
+)
+
+type WorkFunc[T, R any] func(ctx context.Context, job T) R
+
+type Pool[T, R any] struct {
+    concurrency int
+    fn          WorkFunc[T, R]
+    jobs        chan T
+    results     chan R
+    wg          sync.WaitGroup
+}
+
+func New[T, R any](concurrency, buffer int, fn WorkFunc[T, R]) *Pool[T, R] {
+    return &Pool[T, R]{
+        concurrency: concurrency,
+        fn:          fn,
+        jobs:        make(chan T, buffer),
+        results:     make(chan R, buffer),
+    }
+}
+
+func (p *Pool[T, R]) Start(ctx context.Context) {
+    for i := 0; i < p.concurrency; i++ {
+        p.wg.Add(1)
+        go func() {
+            defer p.wg.Done()
+            for {
+                select {
+                case <-ctx.Done():
+                    return
+                case job, ok := <-p.jobs:
+                    if !ok {
+                        return
+                    }
+                    p.results <- p.fn(ctx, job)
+                }
+            }
+        }()
+    }
+}
+
+func (p *Pool[T, R]) Submit(job T)       { p.jobs <- job }
+func (p *Pool[T, R]) Close()             { close(p.jobs) }
+func (p *Pool[T, R]) Results() <-chan R  { return p.results }
+func (p *Pool[T, R]) Wait()              { p.wg.Wait(); close(p.results) }
+```
+
+Usage — no type assertions anywhere:
+
+```go
+p := pool.New[HTTPJob, HTTPResult](50, 500, func(ctx context.Context, job HTTPJob) HTTPResult {
+    return job.Execute(ctx)
+})
+p.Start(ctx)
+// ... submit, collect results with full type safety
+```
+
+---
+
+## 7. Priority Job Queues
+
+Not all jobs are equal. In ARCHER, a "cancel run" control command must preempt pending HTTP jobs:
+
+```go
+type PriorityPool struct {
+    highPriority chan Job // control commands, run cancellation
+    lowPriority  chan Job // regular HTTP jobs
+    results      chan Result
+    wg           sync.WaitGroup
+}
+
+func (p *PriorityPool) workerLoop(ctx context.Context) {
+    defer p.wg.Done()
+    for {
+        // Check high priority first (non-blocking)
+        select {
+        case job, ok := <-p.highPriority:
+            if !ok {
+                return
+            }
+            p.results <- job.Execute(ctx)
+            continue
+        default:
+        }
+
+        // Then wait for either
+        select {
+        case <-ctx.Done():
+            return
+        case job, ok := <-p.highPriority:
+            if !ok {
+                return
+            }
+            p.results <- job.Execute(ctx)
+        case job, ok := <-p.lowPriority:
+            if !ok {
+                return
+            }
+            p.results <- job.Execute(ctx)
+        }
+    }
+}
+```
+
+The double-select pattern: first non-blocking check of the high-priority channel, then blocking wait on both. Workers always drain high-priority work before processing low-priority jobs.
+
+---
+
+## 8. The Kafka Consumer as a Worker Pool
+
+The Kafka consumer in ARCHER is a worker pool where messages are the jobs:
+
+```go
+// internal/kafka/consumer_pool.go
+type ConsumerPool struct {
+    reader      *kafka.Reader
+    workerCount int
+    processFn   func(ctx context.Context, msg kafka.Message) error
+    logger      *zap.Logger
+}
+
+func (c *ConsumerPool) Run(ctx context.Context) error {
+    msgCh := make(chan kafka.Message, c.workerCount*2)
+
+    // Single reader goroutine — Kafka reader is not thread-safe
+    go func() {
+        defer close(msgCh)
+        for {
+            msg, err := c.reader.ReadMessage(ctx)
+            if err != nil {
+                if ctx.Err() != nil {
+                    return
+                }
+                c.logger.Error("kafka read", zap.Error(err))
+                continue
+            }
+            select {
+            case msgCh <- msg:
+            case <-ctx.Done():
+                return
+            }
+        }
+    }()
+
+    // Worker pool processes messages concurrently
+    var wg sync.WaitGroup
+    for i := 0; i < c.workerCount; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for msg := range msgCh {
+                if err := c.processFn(ctx, msg); err != nil {
+                    c.logger.Error("process message",
+                        zap.Int64("offset", msg.Offset),
+                        zap.Error(err),
+                    )
+                }
+            }
+        }()
+    }
+
+    wg.Wait()
+    return ctx.Err()
+}
+```
+
+**Critical constraint**: The Kafka reader is read sequentially by a single goroutine. Workers receive messages via `msgCh`. This preserves Kafka's ordering guarantees per partition while parallelizing message processing.
+
+---
+
+## 9. Backpressure and Flow Control
+
+A pool without backpressure is a pool that lies about its capacity. When the consumer is slower than the producer:
+
+```go
+// Attempt 1: Drop jobs (lossy — acceptable for non-critical telemetry)
+select {
+case pool.jobs <- job:
+default:
+    metrics.DroppedJobs.Inc()
+}
+
+// Attempt 2: Block the producer (lossless — correct for load generator)
+pool.jobs <- job // blocks until a worker picks it up
+
+// Attempt 3: Apply upstream pressure via rate limiting
+if err := limiter.Wait(ctx); err != nil {
+    return // context cancelled — shut down cleanly
+}
+pool.jobs <- job
+```
+
+Choose based on the semantics of your system:
+- **Load generator** → block (every job represents a real request that must be sent)
+- **Telemetry agent under overload** → drop with counter (losing some metrics is acceptable)
+- **Worker orchestrator** → block with timeout (return error if job queue is full for >N seconds)
+
+---
+
+## 10. Pool Observability
+
+A pool is a black box without instrumentation:
+
+```go
+type ObservablePool struct {
+    *Pool
+    activeWorkers  atomic.Int64
+    queueDepth     func() int  // closure over chan len
+    processedTotal atomic.Int64
+    errorTotal     atomic.Int64
+}
+
+func (p *ObservablePool) workerLoop(ctx context.Context) {
+    for job := range p.jobs {
+        p.activeWorkers.Add(1)
+        result := job.Execute(ctx)
+        p.activeWorkers.Add(-1)
+        p.processedTotal.Add(1)
+        if result.Err != nil {
+            p.errorTotal.Add(1)
+        }
+        p.results <- result
+    }
+}
+
+// Expose to Prometheus in a metrics goroutine
+func (p *ObservablePool) RegisterMetrics(reg prometheus.Registerer) {
+    reg.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+        Name: "archer_pool_active_workers",
+    }, func() float64 { return float64(p.activeWorkers.Load()) }))
+
+    reg.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+        Name: "archer_pool_queue_depth",
+    }, func() float64 { return float64(len(p.jobs)) }))
+}
+```
+
+Key metrics for every ARCHER worker pool:
+- `active_workers` — how many workers are currently executing jobs
+- `queue_depth` — how many jobs are pending (backpressure indicator)
+- `processed_total` — total jobs completed (rate = throughput)
+- `error_total` — total failures (rate = error rate)
+
+---
+
+## Key Takeaways
+
+1. **Fixed concurrency, unbounded queue** — the worker pool separates capacity from throughput.
+2. **Lifecycle is a state machine**: Idle → Running → Draining → Stopped. Never violate the order.
+3. **Rate limiting via token bucket** (`golang.org/x/time/rate`) for controlled load generation.
+4. **Kafka consumer = worker pool** with a single sequential reader and parallel processors.
+5. **Backpressure is a design choice** — drop, block, or rate-limit depending on system semantics.
+6. **Generics make pools type-safe** — prefer `pool.New[T, R]` over `pool.New` with `any`.
+7. **Instrument every pool** — active workers, queue depth, throughput, error rate.
+
+---
+
+## Common Production Pitfalls
+
+| Pitfall | Consequence | Correct Approach |
+|---|---|---|
+| Goroutine-per-job at scale | Socket/memory/CPU exhaustion | Worker pool with fixed concurrency |
+| Closing job channel before all submitters finish | Panic on send to closed channel | Use `sync.WaitGroup` to track all submitters |
+| No rate limiting in load generator | Target overload; unrealistic benchmarks | `rate.Limiter` token bucket |
+| Sharing Kafka reader across goroutines | Data corruption — reader is not thread-safe | Single reader goroutine feeds a channel |
+| No backpressure on result channel | Accumulator goroutine falls behind; OOM | Buffer results channel proportionally |
+| Missing pool metrics | Blind to saturation or starvation | Expose active workers and queue depth |
+
+---
+
+## Production Checklist
+
+- [ ] Pool concurrency configurable via `RunConfig` — not hardcoded
+- [ ] Job channel buffer sized to `concurrency × 2` minimum
+- [ ] `rate.Limiter` applied in job feeder goroutine if `RatePerSec > 0`
+- [ ] Kafka reader accessed from exactly one goroutine
+- [ ] `active_workers` and `queue_depth` exposed as Prometheus gauges
+- [ ] Pool lifecycle documented: `Start → Submit → Close → Wait`
+- [ ] Generic pool used where job/result types are known at compile time
+- [ ] Context cancellation exits all worker goroutines cleanly
+
+---
+
+## Mini Backend Exercise
+
+**Task:** Build `ObservablePool` with 10 workers processing mock `HTTPJob`s:
+1. Jobs sleep 10–100ms (simulate HTTP latency)
+2. 10% jobs return an error
+3. Expose `active_workers`, `queue_depth`, `processed_total`, `error_rate` as console output every second
+4. Run for 10 seconds then shut down gracefully via context cancellation
+
+---
+
+## Systems-Oriented Exercise
+
+Design the worker pool configuration for an ARCHER load test run:
+1. Given target: 500 req/s sustained for 60 seconds against an endpoint with p99 latency of 200ms — what concurrency is needed? (Hint: Little's Law: N = λ × W)
+2. What buffer size for the job channel?
+3. What buffer size for the result channel?
+4. How does ramp-up (0→500 req/s over 10s) change the answer?
+
+---
+
+## How This Maps to the ARCHER Architecture
+
+| Component | Worker Pool Role |
+|---|---|
+| Load Generator | Core execution engine — `HTTPJob` pool with rate limiter |
+| Kafka Consumer | Sequential reader + parallel processor pool |
+| Worker Orchestrator | Pool of `RunWorker` goroutines managing load test lifecycles |
+| Telemetry Agent | Pool consuming from a metric channel, batching for export |
+| Background Jobs | Retry pool for failed metric exports |
+
+---
+
+## What Actually Matters for the Hackathon
+
+- Little's Law: concurrency = rate × latency. Know your numbers before setting pool size.
+- The job feeder + pool pattern is the correct architecture — not goroutine-per-request
+- Rate limiter is 2 lines with `golang.org/x/time/rate` — add it from the start
+- Pool metrics in Grafana are how you prove ARCHER is actually generating the intended load
+
+---
+
+## What Can Be Ignored for Now
+
+- Work-stealing schedulers — the Go runtime already does this across Ps
+- Lock-free queues — buffered channels have sufficient performance for ARCHER's scale
+- Persistent job queues (Redis, SQS) — relevant when jobs must survive process restarts
+- Job deduplication — not needed for stateless HTTP load generation
+
+---
+
+*Next chapter: Context Package and Graceful Cancellation — the mechanism that makes all pool shutdown, timeout, and cancellation semantics composable across every layer of the stack.*
 
 
 ---
@@ -1849,2556 +3206,3 @@ func (b *MetricBroadcaster) broadcastViaRedis(ctx context.Context, runID string,
 ---
 
 *Next chapter: Kafka Integration and Event-Driven Systems in Go — durable event streaming for the telemetry pipeline.*
-
-
----
-
-# Chapter 11 — Kafka Integration and Event-Driven Systems in Go
-
-> **Engineering Learning Booklet | ARCHER Backend Architecture Series**
-> *Durable event streaming, consumer group semantics, and event-driven telemetry pipeline design for distributed backends.*
-
----
-
-## 1. Why Kafka in ARCHER
-
-The ARCHER telemetry pipeline has a fundamental tension: the load generator can produce 50,000–100,000 metric events per second, but the database cannot absorb writes at that rate directly. Without a buffer, the pipeline either drops events (lossy) or applies backpressure that slows the load generator (inaccurate benchmarks).
-
-Kafka solves this with **durable, ordered, replayable event streams**:
-
-```
-Load Generator Workers
-        │
-        ▼  (high-speed writes)
-  Kafka Topic: archer.metrics
-        │
-        ▼  (consumer-controlled pace)
-  Telemetry Consumers
-        │
-        ▼  (batched writes)
-  TimescaleDB / ClickHouse
-```
-
-The load generator writes at full speed. Kafka buffers durably. Consumers process at database-sustainable throughput. Events are never lost — they can be replayed from any offset if a consumer crashes.
-
----
-
-## 2. Kafka Core Concepts (Engineering-First)
-
-Understanding the primitives before touching the API:
-
-| Concept | Definition | ARCHER Implication |
-|---|---|---|
-| **Topic** | Named, durable, ordered log | `archer.metrics`, `archer.runs`, `archer.alerts` |
-| **Partition** | Parallel sub-log within a topic | Parallelism unit — N partitions = N concurrent consumers |
-| **Offset** | Position of a message in a partition | Committed by consumer to track progress |
-| **Consumer Group** | Set of consumers sharing partition assignment | Scale consumers independently of producers |
-| **Broker** | Kafka server holding partition replicas | Failure tolerance via replication factor |
-| **Retention** | How long messages are kept (time or size) | 7-day retention = 7 days of metric replay |
-
-**Ordering guarantee**: Within a partition, messages are strictly ordered. Across partitions, there is no ordering guarantee. In ARCHER, partition by `run_id` ensures all events from one run are ordered within a partition.
-
----
-
-## 3. The `kafka-go` Library
-
-ARCHER uses `github.com/segmentio/kafka-go` — it exposes Kafka semantics directly without hiding them behind auto-commit abstractions.
-
-```go
-import "github.com/segmentio/kafka-go"
-```
-
-### 3.1 Producer
-
-```go
-// internal/kafka/producer.go
-package kafka
-
-import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "time"
-
-    "github.com/segmentio/kafka-go"
-    "go.uber.org/zap"
-)
-
-type Producer struct {
-    writer *kafka.Writer
-    logger *zap.Logger
-}
-
-func NewProducer(brokers []string, topic string, logger *zap.Logger) *Producer {
-    w := &kafka.Writer{
-        Addr:  kafka.TCP(brokers...),
-        Topic: topic,
-
-        // Balancer determines which partition a message goes to
-        // RoundRobin: even distribution across partitions
-        // Hash: same key always goes to same partition (ordering per key)
-        Balancer: &kafka.Hash{},
-
-        // Batch settings — tune for throughput vs latency
-        BatchSize:    1000,                  // send when batch reaches 1000 messages
-        BatchTimeout: 10 * time.Millisecond, // or after 10ms, whichever first
-
-        // Require all in-sync replicas to ack (strongest durability guarantee)
-        RequiredAcks: kafka.RequireAll,
-
-        // Retry failed writes
-        MaxAttempts: 3,
-
-        // Compression reduces network bandwidth significantly for JSON
-        Compression: kafka.Snappy,
-
-        // Allow Kafka to auto-create the topic if missing (dev only)
-        AllowAutoTopicCreation: false,
-    }
-    return &Producer{writer: w, logger: logger}
-}
-
-// PublishMetric sends a single metric event to Kafka.
-// Key is the run_id — ensures ordering per run within a partition.
-func (p *Producer) PublishMetric(ctx context.Context, runID string, event MetricEvent) error {
-    payload, err := json.Marshal(event)
-    if err != nil {
-        return fmt.Errorf("marshal metric event: %w", err)
-    }
-
-    err = p.writer.WriteMessages(ctx, kafka.Message{
-        Key:   []byte(runID),
-        Value: payload,
-        Headers: []kafka.Header{
-            {Key: "content-type", Value: []byte("application/json")},
-            {Key: "schema-version", Value: []byte("v1")},
-        },
-        Time: time.Now(),
-    })
-    if err != nil {
-        return fmt.Errorf("kafka write: %w", err)
-    }
-    return nil
-}
-
-// PublishBatch sends multiple events in a single network round-trip.
-func (p *Producer) PublishBatch(ctx context.Context, runID string, events []MetricEvent) error {
-    msgs := make([]kafka.Message, len(events))
-    for i, e := range events {
-        payload, err := json.Marshal(e)
-        if err != nil {
-            return fmt.Errorf("marshal event %d: %w", i, err)
-        }
-        msgs[i] = kafka.Message{
-            Key:   []byte(runID),
-            Value: payload,
-            Time:  e.Timestamp,
-        }
-    }
-    return p.writer.WriteMessages(ctx, msgs...)
-}
-
-func (p *Producer) Close() error {
-    return p.writer.Close()
-}
-```
-
-**Batch publishing is critical for throughput.** A load generator producing 50k events/second writing one-by-one would saturate the producer with network round-trips. `PublishBatch` amortizes the cost: one network call for 1000 events = 50 calls/second instead of 50,000.
-
-### 3.2 Consumer
-
-```go
-// internal/kafka/consumer.go
-package kafka
-
-import (
-    "context"
-    "fmt"
-    "time"
-
-    "github.com/segmentio/kafka-go"
-    "go.uber.org/zap"
-)
-
-type Consumer struct {
-    reader    *kafka.Reader
-    processFn func(ctx context.Context, msg kafka.Message) error
-    logger    *zap.Logger
-}
-
-func NewConsumer(brokers []string, topic, groupID string, logger *zap.Logger) *Consumer {
-    r := kafka.NewReader(kafka.ReaderConfig{
-        Brokers:     brokers,
-        Topic:       topic,
-        GroupID:     groupID,   // consumer group for offset management
-        MinBytes:    10e3,      // 10KB — fetch at least this much data per request
-        MaxBytes:    10e6,      // 10MB — fetch at most this much per request
-        MaxWait:     500 * time.Millisecond, // wait up to 500ms for MinBytes
-        StartOffset: kafka.LastOffset,       // new consumers start from latest
-        CommitInterval: time.Second,         // auto-commit offsets every second
-        Logger: kafka.LoggerFunc(func(msg string, a ...any) {
-            logger.Debug("kafka", zap.String("msg", fmt.Sprintf(msg, a...)))
-        }),
-    })
-    return &Consumer{reader: r, logger: logger}
-}
-
-// Run processes messages until ctx is cancelled.
-func (c *Consumer) Run(ctx context.Context) error {
-    for {
-        // ReadMessage blocks until a message is available or ctx is cancelled.
-        // It also commits the previous message's offset automatically (with CommitInterval).
-        msg, err := c.reader.ReadMessage(ctx)
-        if err != nil {
-            if ctx.Err() != nil {
-                return nil // clean shutdown — not an error
-            }
-            c.logger.Error("kafka read", zap.Error(err))
-            // Back off before retrying to avoid hammering a failed broker
-            select {
-            case <-ctx.Done():
-                return nil
-            case <-time.After(2 * time.Second):
-            }
-            continue
-        }
-
-        if err := c.processFn(ctx, msg); err != nil {
-            c.logger.Error("process message",
-                zap.String("topic", msg.Topic),
-                zap.Int("partition", msg.Partition),
-                zap.Int64("offset", msg.Offset),
-                zap.Error(err),
-            )
-            // Decision: skip and continue (or DLQ — see §5)
-        }
-    }
-}
-
-func (c *Consumer) Close() error {
-    return c.reader.Close()
-}
-```
-
----
-
-## 4. Manual vs Auto Commit — Exactly-Once Semantics
-
-`kafka-go` with `CommitInterval` auto-commits offsets periodically. This provides **at-least-once** semantics: if the consumer crashes between processing and committing, messages are re-processed after restart.
-
-For ARCHER metrics, at-least-once is acceptable — duplicate metric events result in slightly overcounted stats, not data corruption. For financial transactions or billing events, you need exactly-once semantics, which requires:
-
-1. **Manual offset commit** after successful processing
-2. **Idempotent processing** (deduplicate on the consumer side)
-
-```go
-// Manual commit pattern — use when processing must complete before marking done
-func (c *Consumer) RunManualCommit(ctx context.Context) error {
-    for {
-        // FetchMessage does NOT auto-commit — you control when to commit
-        msg, err := c.reader.FetchMessage(ctx)
-        if err != nil {
-            if ctx.Err() != nil {
-                return nil
-            }
-            continue
-        }
-
-        if err := c.processFn(ctx, msg); err != nil {
-            // Don't commit — message will be re-delivered
-            c.logger.Error("processing failed, message will be retried",
-                zap.Int64("offset", msg.Offset),
-                zap.Error(err),
-            )
-            continue
-        }
-
-        // Commit only after successful processing
-        if err := c.reader.CommitMessages(ctx, msg); err != nil {
-            c.logger.Error("commit failed", zap.Error(err))
-            // Uncommitted message will be re-processed — ensure idempotency
-        }
-    }
-}
-```
-
----
-
-## 5. Dead Letter Queue Pattern
-
-Not all message failures are transient. A malformed JSON payload will never parse correctly — retrying indefinitely blocks the partition. The DLQ pattern moves permanently-failed messages to a separate topic for inspection:
-
-```go
-// internal/kafka/dlq.go
-type DLQProducer struct {
-    writer *kafka.Writer
-}
-
-type DLQMessage struct {
-    OriginalTopic     string    `json:"original_topic"`
-    OriginalPartition int       `json:"original_partition"`
-    OriginalOffset    int64     `json:"original_offset"`
-    Error             string    `json:"error"`
-    Payload           []byte    `json:"payload"`
-    FailedAt          time.Time `json:"failed_at"`
-}
-
-func (d *DLQProducer) Send(ctx context.Context, original kafka.Message, err error) error {
-    dlqMsg := DLQMessage{
-        OriginalTopic:     original.Topic,
-        OriginalPartition: original.Partition,
-        OriginalOffset:    original.Offset,
-        Error:             err.Error(),
-        Payload:           original.Value,
-        FailedAt:          time.Now(),
-    }
-    data, _ := json.Marshal(dlqMsg)
-    return d.writer.WriteMessages(ctx, kafka.Message{Value: data})
-}
-
-// In the consumer loop:
-if err := processMessage(ctx, msg); err != nil {
-    var parseErr *ParseError
-    if errors.As(err, &parseErr) {
-        // Permanent failure — send to DLQ and continue
-        dlq.Send(ctx, msg, err)
-        continue
-    }
-    // Transient failure — don't commit; will be retried
-    time.Sleep(backoff)
-}
-```
-
----
-
-## 6. The Telemetry Consumer Pipeline
-
-The ARCHER telemetry consumer reads from Kafka and writes to the time-series database in batches:
-
-```go
-// internal/telemetry/consumer.go
-package telemetry
-
-type Consumer struct {
-    kafka     *kafka.Consumer
-    store     MetricStore
-    batchSize int
-    flushFreq time.Duration
-    logger    *zap.Logger
-    dlq       *kafka.DLQProducer
-}
-
-func NewConsumer(cfg ConsumerConfig, store MetricStore, logger *zap.Logger) *Consumer {
-    return &Consumer{
-        kafka:     kafka.NewConsumer(cfg.Kafka.Brokers, cfg.Kafka.Topic, cfg.Kafka.GroupID, logger),
-        store:     store,
-        batchSize: cfg.BatchSize,   // 500 events per DB write
-        flushFreq: cfg.FlushFreq,   // or every 500ms, whichever first
-        logger:    logger,
-    }
-}
-
-func (c *Consumer) Run(ctx context.Context) error {
-    batch := make([]MetricEvent, 0, c.batchSize)
-    ticker := time.NewTicker(c.flushFreq)
-    defer ticker.Stop()
-
-    msgCh := make(chan kafka.Message, c.batchSize)
-
-    // Kafka reader goroutine
-    go func() {
-        defer close(msgCh)
-        for {
-            msg, err := c.kafka.Reader().ReadMessage(ctx)
-            if err != nil {
-                if ctx.Err() != nil {
-                    return
-                }
-                c.logger.Error("kafka read", zap.Error(err))
-                continue
-            }
-            select {
-            case msgCh <- msg:
-            case <-ctx.Done():
-                return
-            }
-        }
-    }()
-
-    flush := func() {
-        if len(batch) == 0 {
-            return
-        }
-        if err := c.store.SaveBatch(ctx, batch); err != nil {
-            c.logger.Error("batch write failed",
-                zap.Int("batch_size", len(batch)),
-                zap.Error(err),
-            )
-            return
-        }
-        c.logger.Debug("batch flushed", zap.Int("count", len(batch)))
-        batch = batch[:0] // reset without reallocating
-    }
-
-    for {
-        select {
-        case <-ctx.Done():
-            flush() // final flush
-            return ctx.Err()
-
-        case <-ticker.C:
-            flush()
-
-        case msg, ok := <-msgCh:
-            if !ok {
-                flush()
-                return nil
-            }
-            var event MetricEvent
-            if err := json.Unmarshal(msg.Value, &event); err != nil {
-                c.dlq.Send(ctx, msg, &ParseError{Err: err})
-                continue
-            }
-            batch = append(batch, event)
-            if len(batch) >= c.batchSize {
-                flush()
-            }
-        }
-    }
-}
-```
-
-This pattern — **accumulate in memory, flush on size or time** — is the standard approach for writing high-throughput streaming data to a database. It reduces write amplification dramatically: 500 individual INSERTs become one bulk INSERT.
-
----
-
-## 7. Topic Design for ARCHER
-
-```
-archer.metrics          — per-request telemetry from load generator workers
-archer.runs             — run lifecycle events (created, started, completed, failed)
-archer.alerts           — threshold breach notifications
-archer.metrics.dlq      — dead-lettered unparseable metric events
-```
-
-**Partition strategy:**
-- `archer.metrics`: partition by `run_id` (all events from a run in one partition, ordered)
-- `archer.runs`: partition by `run_id` (run state changes are ordered per run)
-- `archer.alerts`: 1 partition (low volume, global ordering acceptable)
-
-**Retention policy:**
-- `archer.metrics`: 7 days or 100GB, whichever first (replay window for debugging)
-- `archer.runs`: 30 days (audit log of all load test runs)
-
----
-
-## 8. Kafka in the Producer Side — The Load Generator
-
-The load generator workers produce to Kafka via a shared producer with local buffering:
-
-```go
-// internal/loadgen/kafka_emitter.go
-type KafkaEmitter struct {
-    producer  *kafka.Producer
-    buffer    chan MetricEvent
-    batchSize int
-    flushFreq time.Duration
-}
-
-func NewKafkaEmitter(producer *kafka.Producer, bufferSize, batchSize int, flushFreq time.Duration) *KafkaEmitter {
-    return &KafkaEmitter{
-        producer:  producer,
-        buffer:    make(chan MetricEvent, bufferSize),
-        batchSize: batchSize,
-        flushFreq: flushFreq,
-    }
-}
-
-// Emit is called by worker goroutines — non-blocking, drops if buffer full.
-func (e *KafkaEmitter) Emit(event MetricEvent) {
-    select {
-    case e.buffer <- event:
-    default:
-        // Emitter buffer full — accept metric loss to preserve benchmark accuracy
-        emitterDroppedEvents.Inc()
-    }
-}
-
-// Run batches and publishes events from the buffer.
-func (e *KafkaEmitter) Run(ctx context.Context, runID string) {
-    ticker := time.NewTicker(e.flushFreq)
-    defer ticker.Stop()
-
-    batch := make([]MetricEvent, 0, e.batchSize)
-
-    for {
-        select {
-        case <-ctx.Done():
-            // Drain buffer before exit
-            for len(e.buffer) > 0 {
-                batch = append(batch, <-e.buffer)
-            }
-            if len(batch) > 0 {
-                e.producer.PublishBatch(context.Background(), runID, batch)
-            }
-            return
-
-        case <-ticker.C:
-            for len(batch) < e.batchSize && len(e.buffer) > 0 {
-                batch = append(batch, <-e.buffer)
-            }
-            if len(batch) > 0 {
-                if err := e.producer.PublishBatch(ctx, runID, batch); err != nil {
-                    e.producer.logger.Error("kafka publish batch", zap.Error(err))
-                }
-                batch = batch[:0]
-            }
-
-        case event := <-e.buffer:
-            batch = append(batch, event)
-            if len(batch) >= e.batchSize {
-                if err := e.producer.PublishBatch(ctx, runID, batch); err != nil {
-                    e.producer.logger.Error("kafka publish batch", zap.Error(err))
-                }
-                batch = batch[:0]
-            }
-        }
-    }
-}
-```
-
-**Design choice — drop on full buffer**: The emitter's purpose is metric telemetry, not the load test itself. If Kafka is slow and the emitter buffer fills, dropping events preserves the load generator's throughput accuracy. The load test must not slow down because its telemetry pipeline is congested.
-
----
-
-## 9. Consumer Group Scaling
-
-Kafka consumer groups enable horizontal scaling of the telemetry consumer:
-
-```
-archer.metrics topic (6 partitions)
-    Partition 0, 1  → Consumer Instance A
-    Partition 2, 3  → Consumer Instance B
-    Partition 4, 5  → Consumer Instance C
-```
-
-In Kubernetes, you run 3 replicas of the telemetry consumer service. Kafka assigns 2 partitions per instance. If instance B crashes, Kafka reassigns partitions 2 and 3 to A and C within ~10 seconds (session timeout).
-
-```yaml
-# deploy/kubernetes/telemetry-consumer.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: archer-telemetry-consumer
-spec:
-  replicas: 3  # must not exceed number of partitions
-  template:
-    spec:
-      containers:
-      - name: consumer
-        image: ghcr.io/org/archer-agent:latest
-        env:
-        - name: KAFKA_GROUP_ID
-          value: "archer-telemetry-v1"
-        - name: KAFKA_TOPIC
-          value: "archer.metrics"
-```
-
-**Rule**: Replicas > partitions is wasteful — extra consumers sit idle. Replicas = partitions is the sweet spot for throughput. Replicas < partitions means each consumer handles multiple partitions — fine, but less isolated.
-
----
-
-## Key Takeaways
-
-1. **Kafka decouples producer throughput from consumer throughput** — the load generator never slows down due to DB write speed.
-2. **Partition by `run_id`** — ordering per run, parallelism across runs.
-3. **Batch writes to Kafka and batch writes to DB** — the two performance multipliers.
-4. **At-least-once with DLQ** is the pragmatic pattern for telemetry; exactly-once for financial data.
-5. **Consumer group replicas ≤ partition count** — extra consumers idle above this ratio.
-6. **Drop events at the emitter, not at the producer** — preserve benchmark accuracy; accept telemetry loss under extreme pressure.
-7. **`context.Canceled` from `ReadMessage` is a clean shutdown signal**, not an error.
-
----
-
-## Common Production Pitfalls
-
-| Pitfall | Consequence | Correct Approach |
-|---|---|---|
-| Auto-commit before processing | Data loss on crash between commit and process | `FetchMessage` + manual `CommitMessages` after success |
-| No DLQ for parse errors | Consumer stuck on unparseable message forever | DLQ bad messages; never retry unparseable |
-| Replicas > partitions | Idle consumers consuming memory | Set replicas = partitions |
-| `RequiredAcks: None` on producer | Messages lost on broker failover | `RequiredAcks: RequireAll` for durability |
-| No compression | 3–5× unnecessary Kafka network bandwidth | Use Snappy or LZ4 for JSON payloads |
-| Emitter blocks on Kafka backpressure | Load generator throughput degrades | Drop events with counter; never block the benchmark |
-| Single Kafka reader shared across goroutines | Data corruption; kafka-go reader is not thread-safe | One reader goroutine; distribute via channel |
-
----
-
-## Production Checklist
-
-- [ ] Topics pre-created with correct partition count (not auto-created in production)
-- [ ] `RequiredAcks: RequireAll` on producer for durability
-- [ ] Snappy or LZ4 compression on producer
-- [ ] `BatchSize` and `BatchTimeout` tuned for throughput vs latency tradeoff
-- [ ] DLQ topic for permanent processing failures
-- [ ] Manual commit (`FetchMessage` + `CommitMessages`) for exactly-once-required pipelines
-- [ ] Consumer group ID versioned (`archer-telemetry-v1`) — allows clean reset on schema change
-- [ ] `context.Canceled` handled as clean shutdown in consumer loop
-- [ ] Kafka reader accessed from exactly one goroutine
-- [ ] Consumer replica count ≤ topic partition count
-
----
-
-## Systems-Oriented Exercise
-
-Design the complete event flow for a single ARCHER load test:
-1. Run created → `archer.runs` event
-2. Workers start → metrics flow to `archer.metrics` (with `run_id` as key)
-3. Consumer reads, batches, writes to TimescaleDB
-4. Run completes → `archer.runs` completion event
-5. What happens if the telemetry consumer crashes mid-run and restarts?
-6. What is the maximum data loss window with `CommitInterval: 1s`?
-
----
-
-## How This Maps to the ARCHER Architecture
-
-| Component | Kafka Role |
-|---|---|
-| Load Generator | Producer — publishes `MetricEvent` to `archer.metrics` |
-| Telemetry Consumer | Consumer group — reads, batches, writes to DB |
-| Run Manager (API) | Producer — publishes `RunEvent` to `archer.runs` |
-| Alert Service | Consumer — reads from `archer.metrics`, publishes to `archer.alerts` |
-| DLQ Monitor | Consumer — reads `archer.metrics.dlq`, notifies ops |
-
----
-
-*Next chapter: Docker-Aware Backend Design in Go — building Go services that behave correctly inside containers from day one.*
-
-
----
-
-# Chapter 12 — Docker-Aware Backend Design in Go
-
-> **Engineering Learning Booklet | ARCHER Backend Architecture Series**
-> *Building Go services that behave correctly, predictably, and efficiently inside containers — from binary construction to Kubernetes lifecycle alignment.*
-
----
-
-## 1. The Container Contract
-
-When you run a Go service in a container, you enter a contract with the container runtime. Understanding the contract is what separates a service that "works in Docker" from one that is **designed for Docker**:
-
-| Signal / Constraint | Container Runtime Behavior | Your Service Must |
-|---|---|---|
-| `SIGTERM` | Sent before forcible kill | Handle gracefully; drain in-flight requests |
-| `SIGKILL` | Sent after `terminationGracePeriodSeconds` | Nothing you can do — must have finished by now |
-| CPU quota | cgroup limits visible cores | Set `GOMAXPROCS` to quota, not host core count |
-| Memory limit | OOM kill without warning | Know your heap; tune GC; expose memory metrics |
-| Ephemeral filesystem | No state survives container restart | All state in external services (DB, Kafka, Redis) |
-| Shared network namespace | Service discovery via DNS, not localhost | Use configurable service addresses |
-| Readiness probe | Pod receives traffic only when probe passes | `/readyz` must fail until all deps connected |
-| Liveness probe | Pod restarted if probe fails | `/healthz` must succeed as long as process is alive |
-
-Go's properties align naturally with this contract: static binary, fast startup, explicit signal handling, and configurable runtime parameters.
-
----
-
-## 2. The Multi-Stage Dockerfile
-
-Every ARCHER service binary has its own Dockerfile. The pattern is identical across all:
-
-```dockerfile
-# deploy/docker/api.Dockerfile
-# =============================================================
-# Stage 1: Build — Go toolchain produces a static binary
-# =============================================================
-FROM golang:1.22-alpine AS builder
-
-# Install CA certificates for HTTPS requests made during build (module downloads)
-RUN apk add --no-cache ca-certificates git
-
-WORKDIR /build
-
-# Copy dependency files first — creates a cached Docker layer
-# This layer is only invalidated when go.mod or go.sum change
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Copy the full source tree
-COPY . .
-
-# Build arguments for version injection
-ARG VERSION=dev
-ARG GIT_COMMIT=unknown
-ARG BUILD_TIME=unknown
-
-# Build the binary
-# CGO_ENABLED=0  — fully static, no dynamic libc linkage
-# -ldflags -s -w — strip debug symbols (reduces binary 30-40%)
-# -ldflags -X    — inject build-time variables
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-s -w \
-        -X main.version=${VERSION} \
-        -X main.gitCommit=${GIT_COMMIT} \
-        -X main.buildTime=${BUILD_TIME}" \
-    -o /archer-api \
-    ./cmd/api/
-
-# =============================================================
-# Stage 2: Final image — minimal, no build toolchain
-# =============================================================
-FROM scratch
-
-# Copy CA certs — required for TLS connections to Kafka, Postgres, etc.
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-
-# Copy the binary
-COPY --from=builder /archer-api /archer-api
-
-# Non-root user — security best practice
-# scratch has no /etc/passwd, so use numeric UID
-USER 65532:65532
-
-# Expose the application port
-EXPOSE 8080
-
-# Binary is the entrypoint — no shell, no init system
-ENTRYPOINT ["/archer-api"]
-```
-
-**Why `FROM scratch`?**
-- No OS packages = no vulnerabilities from unpatched base OS
-- No shell = no exec-based attacks even if someone gets RCE
-- Image size: 8–20MB vs 80–200MB for `alpine`-based
-- Cold start: faster layer pull, faster container start
-
-**The only cost**: no shell for debugging. Use `kubectl exec` or ephemeral debug containers instead.
-
----
-
-## 3. Build Version Injection
-
-Version information embedded at build time appears in health endpoints and structured logs:
-
-```go
-// cmd/api/main.go
-var (
-    version   = "dev"     // overridden by -ldflags at build time
-    gitCommit = "unknown"
-    buildTime = "unknown"
-)
-
-func main() {
-    log.Info("starting archer-api",
-        zap.String("version", version),
-        zap.String("git_commit", gitCommit),
-        zap.String("build_time", buildTime),
-    )
-    // ...
-}
-
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-    json.NewEncoder(w).Encode(map[string]string{
-        "status":     "ok",
-        "version":    version,
-        "git_commit": gitCommit,
-        "build_time": buildTime,
-    })
-}
-```
-
-Build invocation from CI:
-
-```bash
-docker build \
-    --build-arg VERSION=$(git describe --tags --always) \
-    --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) \
-    --build-arg BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-    -f deploy/docker/api.Dockerfile \
-    -t ghcr.io/org/archer-api:$(git describe --tags --always) \
-    .
-```
-
----
-
-## 4. `GOMAXPROCS` and CPU Quota Alignment
-
-From Chapter 5: a Go process defaults `GOMAXPROCS` to the number of host CPUs, not the container's CPU limit. On a 32-core Kubernetes node with a 2-CPU limit, `GOMAXPROCS=32` means 32 OS threads competing for 2 CPUs — scheduler thrashing.
-
-```go
-// cmd/api/main.go
-import _ "go.uber.org/automaxprocs"
-
-func main() {
-    // automaxprocs reads /sys/fs/cgroup/cpu.cfs_quota_us and cpu.cfs_period_us
-    // Sets GOMAXPROCS = ceil(quota / period) = actual CPU allowance
-    // Logs: "maxprocs: Updating GOMAXPROCS=2: determined from CPU quota"
-    // ...
-}
-```
-
-For the rare case where you need fine control:
-
-```go
-import "runtime"
-
-func main() {
-    cpuLimit := getCPULimitFromCgroup() // read from /sys/fs/cgroup
-    runtime.GOMAXPROCS(cpuLimit)
-}
-```
-
-Add to every binary. The performance difference in CPU-bound services is measurable. The cost is one import.
-
----
-
-## 5. Environment-Driven Configuration
-
-From Chapter 2's config pattern — containers configure services via environment variables. The config loader reads YAML for defaults and env vars for overrides:
-
-```go
-// internal/config/config.go
-func Load() (*Config, error) {
-    // 1. Load defaults from embedded YAML (bundled in the binary)
-    cfg := defaultConfig()
-
-    // 2. Override with config file if mounted (Kubernetes ConfigMap)
-    if path := os.Getenv("CONFIG_PATH"); path != "" {
-        if err := loadFromFile(cfg, path); err != nil {
-            return nil, err
-        }
-    }
-
-    // 3. Override with environment variables (Kubernetes Secrets, per-env config)
-    applyEnvOverrides(cfg)
-
-    return cfg, cfg.validate()
-}
-
-func applyEnvOverrides(cfg *Config) {
-    if v := os.Getenv("SERVER_ADDR"); v != "" {
-        cfg.Server.Addr = v
-    }
-    if v := os.Getenv("DATABASE_URL"); v != "" {
-        cfg.Database.URL = v
-    }
-    if v := os.Getenv("KAFKA_BROKERS"); v != "" {
-        cfg.Kafka.Brokers = strings.Split(v, ",")
-    }
-    if v := os.Getenv("LOG_LEVEL"); v != "" {
-        cfg.Log.Level = v
-    }
-    if v := os.Getenv("GOMAXPROCS"); v != "" {
-        n, _ := strconv.Atoi(v)
-        if n > 0 {
-            runtime.GOMAXPROCS(n)
-        }
-    }
-}
-```
-
-Kubernetes deployment with Secrets:
-
-```yaml
-# deploy/kubernetes/api-deployment.yaml
-spec:
-  containers:
-  - name: api
-    image: ghcr.io/org/archer-api:v1.2.3
-    env:
-    - name: SERVER_ADDR
-      value: ":8080"
-    - name: DATABASE_URL
-      valueFrom:
-        secretKeyRef:
-          name: archer-secrets
-          key: database-url
-    - name: KAFKA_BROKERS
-      value: "kafka-0.kafka.svc:9092,kafka-1.kafka.svc:9092"
-    - name: LOG_LEVEL
-      value: "info"
-    resources:
-      requests:
-        cpu: "500m"
-        memory: "256Mi"
-      limits:
-        cpu: "2"
-        memory: "512Mi"
-```
-
----
-
-## 6. Graceful Shutdown Aligned with Kubernetes
-
-Kubernetes terminates pods in two phases:
-
-```
-Phase 1 (concurrent):
-  - Pod removed from Service endpoints (new requests stop routing to this pod)
-  - SIGTERM sent to PID 1 in the container
-
-Phase 2 (after terminationGracePeriodSeconds = 30s by default):
-  - SIGKILL sent to all processes — no more time
-
-Gap between Phase 1 and your process receiving SIGTERM:
-  - Kubernetes control plane propagates endpoint removal to kube-proxy/iptables
-  - This takes 1-5 seconds in practice
-```
-
-**The race condition**: if your service stops accepting new connections immediately on SIGTERM, requests in-flight during that 1–5s gap get connection refused. The fix: **add a pre-stop sleep**:
-
-```yaml
-# deploy/kubernetes/api-deployment.yaml
-spec:
-  containers:
-  - name: api
-    lifecycle:
-      preStop:
-        exec:
-          command: ["/bin/sleep", "5"]  # wait for endpoint propagation
-```
-
-And your Go shutdown sequence:
-
-```go
-func main() {
-    ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-    defer stop()
-
-    server := buildServer()
-    go server.ListenAndServe()
-
-    <-ctx.Done() // SIGTERM received — but preStop gives us 5s before this fires
-
-    // Kubernetes sent SIGTERM + 5s preStop = 5s of no new connections already
-    // Now gracefully drain in-flight requests
-    shutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-    defer cancel()
-
-    if err := server.Shutdown(shutdownCtx); err != nil {
-        log.Error("shutdown timeout", zap.Error(err))
-    }
-
-    // Close downstream connections
-    db.Close()
-    kafkaProducer.Close()
-    kafkaConsumer.Close()
-}
-```
-
-Total budget: `terminationGracePeriodSeconds (30s)` = `preStop (5s)` + `shutdown drain (20s)` + `buffer (5s)`. Always set `terminationGracePeriodSeconds` ≥ `preStop + shutdownTimeout + 5s`.
-
----
-
-## 7. Health Probes — Correct Kubernetes Integration
-
-From Chapter 9's handler design, now mapped to Kubernetes probe configuration:
-
-```yaml
-# deploy/kubernetes/api-deployment.yaml
-spec:
-  containers:
-  - name: api
-    livenessProbe:
-      httpGet:
-        path: /healthz
-        port: 8080
-      initialDelaySeconds: 5      # wait 5s before first check (startup time)
-      periodSeconds: 10           # check every 10s
-      failureThreshold: 3         # restart after 3 consecutive failures
-      timeoutSeconds: 2           # fail if no response in 2s
-
-    readinessProbe:
-      httpGet:
-        path: /readyz
-        port: 8080
-      initialDelaySeconds: 5
-      periodSeconds: 5            # check more frequently — traffic routing matters
-      failureThreshold: 2         # stop traffic after 2 failures
-      successThreshold: 1         # start traffic after 1 success
-      timeoutSeconds: 3
-```
-
-The readiness probe checks DB and Kafka connectivity (from Chapter 9). During startup, `/readyz` returns 503 until the database connection pool is established. Kubernetes holds traffic until the pod is ready.
-
-**Startup probe for slow-starting services:**
-
-```yaml
-    startupProbe:
-      httpGet:
-        path: /healthz
-        port: 8080
-      failureThreshold: 30   # allow up to 30 × 10s = 5 minutes for startup
-      periodSeconds: 10
-```
-
-The startup probe disables liveness checking during startup — prevents premature restarts for services that take longer to initialize (schema migration, cache warming).
-
----
-
-## 8. Container-Aware Resource Management
-
-### 8.1 Memory Limit Alignment
-
-Go's GC targets a heap size based on `GOGC` (default: 100 = double heap before GC). If your container memory limit is 512MB and the Go heap grows to 256MB, the GC triggers. If the heap grows to 512MB before GC runs, the container is OOM-killed.
-
-Set `GOMEMLIMIT` (Go 1.19+) to 90% of the container memory limit:
-
-```go
-import "runtime/debug"
-
-func main() {
-    // Read from environment — set by deployment manifest
-    if limitStr := os.Getenv("GOMEMLIMIT"); limitStr != "" {
-        limit, _ := strconv.ParseInt(limitStr, 10, 64)
-        debug.SetMemoryLimit(limit)
-    }
-}
-```
-
-```yaml
-env:
-- name: GOMEMLIMIT
-  value: "460MiB"  # 90% of 512Mi limit
-resources:
-  limits:
-    memory: "512Mi"
-```
-
-With `GOMEMLIMIT`, the GC runs more aggressively when approaching the limit — preventing OOM kills at the cost of higher GC CPU. This is the correct tradeoff in a container where OOM kill causes request failures.
-
-### 8.2 Connection Pool Sizing
-
-Database and Kafka connection pools must be sized relative to the number of replicas, not per-instance:
-
-```go
-// Rule: total DB connections = replicas × MaxOpenConns ≤ DB max_connections
-// For 3 replicas and DB max_connections=100: MaxOpenConns = 30 per instance
-
-db.SetMaxOpenConns(cfg.Database.MaxOpenConns)         // e.g., 30
-db.SetMaxIdleConns(cfg.Database.MaxIdleConns)         // e.g., 10
-db.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime)   // e.g., 5 * time.Minute
-db.SetConnMaxIdleTime(cfg.Database.ConnMaxIdleTime)   // e.g., 2 * time.Minute
-```
-
-Stale connections to a restarted DB cause failures. `ConnMaxLifetime` forces periodic reconnection, picking up newly-promoted read replicas or connection proxy changes.
-
----
-
-## 9. Docker Compose for Local Development
-
-For local ARCHER development, all dependencies run in Docker Compose:
-
-```yaml
-# docker-compose.yml
-version: "3.9"
-
-services:
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-
-  kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    depends_on: [zookeeper]
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_NUM_PARTITIONS: 6
-
-  postgres:
-    image: timescale/timescaledb:latest-pg15
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_DB: archer
-      POSTGRES_USER: archer
-      POSTGRES_PASSWORD: archer_dev
-
-  api:
-    build:
-      context: .
-      dockerfile: deploy/docker/api.Dockerfile
-      args:
-        VERSION: dev
-    ports:
-      - "8080:8080"
-    environment:
-      DATABASE_URL: postgres://archer:archer_dev@postgres:5432/archer?sslmode=disable
-      KAFKA_BROKERS: kafka:9092
-      LOG_LEVEL: debug
-    depends_on:
-      - postgres
-      - kafka
-
-  worker:
-    build:
-      context: .
-      dockerfile: deploy/docker/worker.Dockerfile
-    environment:
-      KAFKA_BROKERS: kafka:9092
-      DATABASE_URL: postgres://archer:archer_dev@postgres:5432/archer?sslmode=disable
-    depends_on:
-      - kafka
-      - postgres
-```
-
-The Go services connect to `kafka:9092` and `postgres:5432` using Docker Compose's internal DNS — service names resolve to container IPs. This is structurally identical to Kubernetes service DNS (`kafka.default.svc.cluster.local`).
-
----
-
-## 10. Structured Logging for Container Environments
-
-In containers, `stdout` is the log destination. Container runtimes (Docker, containerd) collect it and forward to your log aggregation system (Loki, CloudWatch, Datadog). Never write to files inside a container — the files disappear on restart.
-
-```go
-// internal/logger/logger.go
-package logger
-
-import (
-    "os"
-    "go.uber.org/zap"
-    "go.uber.org/zap/zapcore"
-)
-
-func New(level string) (*zap.Logger, error) {
-    lvl, err := zapcore.ParseLevel(level)
-    if err != nil {
-        return nil, err
-    }
-
-    // JSON encoding for container log aggregation (Loki, Datadog, etc.)
-    encoderCfg := zapcore.EncoderConfig{
-        TimeKey:        "ts",
-        LevelKey:       "level",
-        NameKey:        "logger",
-        CallerKey:      "caller",
-        MessageKey:     "msg",
-        StacktraceKey:  "stacktrace",
-        LineEnding:     zapcore.DefaultLineEnding,
-        EncodeLevel:    zapcore.LowercaseLevelEncoder,
-        EncodeTime:     zapcore.ISO8601TimeEncoder,
-        EncodeDuration: zapcore.MillisDurationEncoder,
-        EncodeCaller:   zapcore.ShortCallerEncoder,
-    }
-
-    core := zapcore.NewCore(
-        zapcore.NewJSONEncoder(encoderCfg),
-        zapcore.AddSync(os.Stdout), // always stdout in containers
-        lvl,
-    )
-
-    return zap.New(core,
-        zap.AddCaller(),
-        zap.AddStacktrace(zapcore.ErrorLevel),
-    ), nil
-}
-```
-
-The resulting JSON log line is queryable by field:
-
-```json
-{"ts":"2026-05-10T02:30:00.123Z","level":"info","caller":"api/handlers.go:45","msg":"http request","method":"POST","path":"/api/v1/runs","status":201,"duration":23,"request_id":"req-abc123"}
-```
-
-In Grafana Loki: `{service="archer-api"} | json | status >= 400` — instant filtered log view.
-
----
-
-## 11. The Makefile — Unified Build and Ops Interface
-
-Every ARCHER engineer uses the same commands regardless of platform:
-
-```makefile
-# Makefile
-.DEFAULT_GOAL := help
-
-VERSION    := $(shell git describe --tags --always --dirty)
-GIT_COMMIT := $(shell git rev-parse --short HEAD)
-BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-
-LDFLAGS := -ldflags="-s -w \
-    -X main.version=$(VERSION) \
-    -X main.gitCommit=$(GIT_COMMIT) \
-    -X main.buildTime=$(BUILD_TIME)"
-
-## build: compile all binaries for Linux/amd64
-.PHONY: build
-build:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o dist/api     ./cmd/api/
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o dist/worker  ./cmd/worker/
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o dist/agent   ./cmd/agent/
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o dist/loadgen ./cmd/loadgen/
-
-## docker-build: build all Docker images
-.PHONY: docker-build
-docker-build:
-	docker build --build-arg VERSION=$(VERSION) --build-arg GIT_COMMIT=$(GIT_COMMIT) \
-	    -f deploy/docker/api.Dockerfile -t ghcr.io/org/archer-api:$(VERSION) .
-	docker build --build-arg VERSION=$(VERSION) --build-arg GIT_COMMIT=$(GIT_COMMIT) \
-	    -f deploy/docker/worker.Dockerfile -t ghcr.io/org/archer-worker:$(VERSION) .
-
-## up: start all services locally with Docker Compose
-.PHONY: up
-up:
-	docker compose up -d
-
-## down: stop all local services
-.PHONY: down
-down:
-	docker compose down
-
-## test: run tests with race detector
-.PHONY: test
-test:
-	go test -race -timeout 60s ./...
-
-## lint: run golangci-lint
-.PHONY: lint
-lint:
-	golangci-lint run ./...
-
-## help: print this help
-.PHONY: help
-help:
-	@grep -E '^## ' Makefile | sed 's/## //'
-```
-
----
-
-## Key Takeaways
-
-1. **`FROM scratch` + static binary** = minimal image, minimal attack surface, fast cold start.
-2. **`automaxprocs`** aligns `GOMAXPROCS` with cgroup CPU quota — mandatory in Kubernetes.
-3. **`GOMEMLIMIT`** prevents OOM kills by triggering GC before reaching the container limit.
-4. **preStop sleep + graceful shutdown** covers the Kubernetes endpoint propagation race.
-5. **All config via environment variables** — no hardcoded addresses; identical binary across environments.
-6. **JSON to stdout** — the only correct logging destination in containers.
-7. **`/healthz` vs `/readyz`** — liveness and readiness serve different Kubernetes functions.
-
----
-
-## Common Production Pitfalls
-
-| Pitfall | Consequence | Correct Approach |
-|---|---|---|
-| `GOMAXPROCS` not set for containers | Scheduler thrashing on CPU-limited pods | `automaxprocs` import in every binary |
-| No `GOMEMLIMIT` | OOM kill on heap spike | Set to 90% of container memory limit |
-| No preStop sleep | Connection refused during rolling deploy | `preStop: sleep 5` in pod spec |
-| `terminationGracePeriodSeconds` < drain time | SIGKILL mid-request | Set period ≥ preStop + shutdownTimeout + 5s |
-| Logging to files inside container | Logs lost on restart; no aggregation | Always log to stdout in JSON |
-| Hardcoded service addresses | Binary needs rebuild per environment | Environment variable with configurable override |
-| Root user in container | Security vulnerability | `USER 65532:65532` in Dockerfile |
-| Missing liveness/readiness probes | Traffic to crashing pod; no auto-restart | Define both probes in every deployment |
-
----
-
-## Production Checklist
-
-- [ ] `FROM scratch` final stage with CA certs copied
-- [ ] `CGO_ENABLED=0` in all build commands
-- [ ] `-ldflags="-s -w"` to strip debug symbols
-- [ ] Version, git commit, build time injected via `-X main.*` ldflags
-- [ ] `automaxprocs` imported in every binary
-- [ ] `GOMEMLIMIT` set to 90% of container memory limit
-- [ ] `preStop: sleep 5` in all Kubernetes pod specs
-- [ ] `terminationGracePeriodSeconds: 40` (≥ preStop + drainTimeout)
-- [ ] `/healthz` and `/readyz` probes configured in Kubernetes
-- [ ] JSON structured logging to stdout only
-- [ ] Non-root `USER` in Dockerfile
-- [ ] DB connection pool sized per replica count
-
----
-
-## Mini Backend Exercise
-
-**Task:** Write a production-ready Dockerfile for the ARCHER worker binary:
-1. Multi-stage: `golang:1.22-alpine` builder → `scratch` final
-2. Version injection via `--build-arg`
-3. Non-root user
-4. Build with `CGO_ENABLED=0 GOOS=linux`
-5. Add a corresponding Kubernetes `Deployment` manifest with liveness/readiness probes, resource limits (2 CPU, 512Mi), and `preStop: sleep 5`
-
----
-
-## How This Maps to the ARCHER Architecture
-
-| ARCHER Component | Docker/K8s Pattern |
-|---|---|
-| `cmd/api` | `api.Dockerfile` → `FROM scratch`; K8s Deployment with readiness probe checking DB + Kafka |
-| `cmd/worker` | `worker.Dockerfile`; K8s Deployment with 3 replicas; `terminationGracePeriodSeconds: 40` |
-| `cmd/agent` | `agent.Dockerfile`; K8s DaemonSet (one per node) or Deployment |
-| `cmd/loadgen` | `loadgen.Dockerfile`; K8s Job (not Deployment — runs once per load test) |
-| All binaries | `automaxprocs`, `GOMEMLIMIT`, JSON stdout, signal handling |
-
----
-
-*Next chapter: Telemetry Pipelines and Concurrent Metrics Processing — assembling the components built so far into the complete ARCHER observability layer.*
-
-
----
-
-# Chapter 13 — Telemetry Pipelines and Concurrent Metrics Processing
-
-> **Engineering Learning Booklet | ARCHER Backend Architecture Series**
-> *Assembling goroutines, channels, Kafka, and aggregation logic into a production-grade observability pipeline.*
-
----
-
-## 1. What a Telemetry Pipeline Is
-
-A telemetry pipeline is the data path from **event generation** to **queryable observation**. In ARCHER, this spans:
-
-```
-Load Generator Workers
-    │  (Result events — latency, status code, worker ID)
-    ▼
-MetricAccumulator  ← in-process, goroutine-safe
-    │  (Snapshots every 1s)
-    ▼
-KafkaEmitter       ← batched, non-blocking
-    │  (Topic: archer.metrics)
-    ▼
-Kafka Broker       ← durable buffer, 6 partitions
-    │
-    ▼
-TelemetryConsumer  ← consumer group, 3 replicas
-    │  (Batch writes every 500ms or 500 events)
-    ▼
-TimescaleDB        ← time-series storage
-    │
-    ▼
-MetricBroadcaster  ← WebSocket hub
-    │  (Snapshot every 1s per active run)
-    ▼
-Dashboard Browser
-```
-
-Each stage has its own goroutine topology, its own failure mode, and its own backpressure contract. This chapter assembles all prior concepts into the complete pipeline.
-
----
-
-## 2. Stage 1 — In-Process Metric Collection
-
-The load generator's worker pool (Chapter 7) produces `Result` events. These are collected by the `MetricAccumulator` (Chapter 3, Chapter 7). The accumulator must be:
-
-- Goroutine-safe (concurrent workers write simultaneously)
-- Non-blocking on the write path (never slow a worker)
-- Snapshotting without blocking writes (readers don't pause writers)
-
-The channel-based collector solves this cleanly:
-
-```go
-// internal/telemetry/collector.go
-package telemetry
-
-import (
-    "context"
-    "time"
-    "sync/atomic"
-)
-
-// EventCollector receives raw result events from workers via a channel.
-// A single goroutine reads from the channel and updates state — no mutex needed.
-type EventCollector struct {
-    input    chan Result        // workers write here
-    state    *CollectorState   // owned exclusively by processLoop goroutine
-    snapshot chan Snapshot      // broadcast snapshots out
-}
-
-type CollectorState struct {
-    total     int64
-    errors    int64
-    latencies []time.Duration
-    byCodes   map[int]int64
-    byWorker  map[string]int64
-}
-
-func NewEventCollector(bufferSize int) *EventCollector {
-    return &EventCollector{
-        input:    make(chan Result, bufferSize),
-        snapshot: make(chan Snapshot, 1), // capacity 1: always the latest snapshot
-        state: &CollectorState{
-            byCodes:  make(map[int]int64),
-            byWorker: make(map[string]int64),
-        },
-    }
-}
-
-// Collect is called by worker goroutines — non-blocking send.
-// Drop silently if buffer full — metric accuracy degrades gracefully.
-func (c *EventCollector) Collect(r Result) {
-    select {
-    case c.input <- r:
-    default:
-        // Buffer full — collector is the bottleneck; acceptable metric loss
-    }
-}
-
-// Run is the single goroutine that owns CollectorState.
-// No lock contention — all state mutation is sequential here.
-func (c *EventCollector) Run(ctx context.Context) {
-    ticker := time.NewTicker(time.Second)
-    defer ticker.Stop()
-
-    for {
-        select {
-        case <-ctx.Done():
-            return
-
-        case r, ok := <-c.input:
-            if !ok {
-                return
-            }
-            c.state.total++
-            if r.Err != nil {
-                c.state.errors++
-            } else {
-                c.state.latencies = append(c.state.latencies, r.Latency)
-                c.state.byCodes[r.StatusCode]++
-                c.state.byWorker[r.WorkerID]++
-            }
-
-        case <-ticker.C:
-            snap := c.buildSnapshot()
-            // Non-blocking write — if consumer is slow, latest snapshot overwrites previous
-            select {
-            case c.snapshot <- snap:
-            case <-c.snapshot: // drain old
-                c.snapshot <- snap
-            }
-        }
-    }
-}
-
-func (c *EventCollector) Snapshots() <-chan Snapshot {
-    return c.snapshot
-}
-```
-
-**Why a single-goroutine collector?** This eliminates all locking on the hot write path. The `CollectorState` is mutated only inside `Run()`. Workers call `Collect()` which is a buffered channel send — a single CPU instruction at the hardware level when the buffer isn't full.
-
----
-
-## 3. Stage 2 — Snapshot and Aggregation
-
-The snapshot produced every second contains the running aggregation:
-
-```go
-// internal/telemetry/snapshot.go
-type Snapshot struct {
-    RunID          string            `json:"run_id"`
-    Timestamp      time.Time         `json:"ts"`
-    TotalRequests  int64             `json:"total_requests"`
-    ErrorCount     int64             `json:"error_count"`
-    ErrorRate      float64           `json:"error_rate"`
-    RequestsPerSec float64           `json:"rps"`
-    P50            time.Duration     `json:"p50_ns"`
-    P95            time.Duration     `json:"p95_ns"`
-    P99            time.Duration     `json:"p99_ns"`
-    MaxLatency     time.Duration     `json:"max_ns"`
-    StatusCodes    map[int]int64     `json:"status_codes"`
-    WorkerCounts   map[string]int64  `json:"worker_counts"`
-    ActiveWorkers  int               `json:"active_workers"`
-}
-
-func (c *EventCollector) buildSnapshot() Snapshot {
-    lats := make([]time.Duration, len(c.state.latencies))
-    copy(lats, c.state.latencies)
-    sortDurations(lats)
-
-    total := c.state.total
-    errors := c.state.errors
-
-    var errRate float64
-    if total > 0 {
-        errRate = float64(errors) / float64(total)
-    }
-
-    return Snapshot{
-        Timestamp:      time.Now(),
-        TotalRequests:  total,
-        ErrorCount:     errors,
-        ErrorRate:      errRate,
-        P50:            percentile(lats, 0.50),
-        P95:            percentile(lats, 0.95),
-        P99:            percentile(lats, 0.99),
-        MaxLatency:     maxDuration(lats),
-        StatusCodes:    cloneMap(c.state.byCodes),
-        WorkerCounts:   cloneMap(c.state.byWorker),
-    }
-}
-```
-
-The snapshot is a **value type** — a full copy. The collector continues updating its state while the snapshot travels down the pipeline. No reference to internal slice or map is exposed.
-
----
-
-## 4. Stage 3 — Dual-Path Publishing
-
-Each snapshot takes two paths simultaneously:
-
-```
-Snapshot
-    ├──► KafkaEmitter   → Kafka → Consumer → DB  (durable, queryable later)
-    └──► MetricBroadcaster → WebSocket Hub → Dashboard (live, ephemeral)
-```
-
-```go
-// internal/telemetry/pipeline.go
-type Pipeline struct {
-    collector   *EventCollector
-    emitter     *KafkaEmitter       // from Chapter 11
-    broadcaster *MetricBroadcaster  // from Chapter 10
-    runID       string
-    logger      *zap.Logger
-}
-
-func (p *Pipeline) Run(ctx context.Context) error {
-    // Start the collector goroutine
-    go p.collector.Run(ctx)
-
-    for {
-        select {
-        case <-ctx.Done():
-            return nil
-        case snap, ok := <-p.collector.Snapshots():
-            if !ok {
-                return nil
-            }
-            snap.RunID = p.runID
-
-            // Dual publish: both paths run concurrently
-            go func(s Snapshot) {
-                if err := p.emitter.EmitSnapshot(ctx, p.runID, s); err != nil {
-                    p.logger.Error("kafka emit failed",
-                        zap.String("run_id", p.runID),
-                        zap.Error(err),
-                    )
-                    // Non-fatal — telemetry loss is acceptable
-                }
-            }(snap)
-
-            // WebSocket broadcast is synchronous and fast — no goroutine needed
-            p.broadcaster.Broadcast(p.runID, snap)
-        }
-    }
-}
-```
-
-The Kafka emit runs in a goroutine because it involves network I/O and may block. The WebSocket broadcast is a channel send to the hub — fast enough to be inline.
-
----
-
-## 5. Stage 4 — The Consumer Pipeline (Kafka → DB)
-
-The consumer pipeline (detailed in Chapter 11) processes snapshots at database-sustainable throughput. Here we focus on the concurrent processing architecture:
-
-```go
-// internal/telemetry/consumer_pipeline.go
-type ConsumerPipeline struct {
-    reader    *kafka.Reader
-    workers   int
-    store     MetricStore
-    dlq       *DLQProducer
-    logger    *zap.Logger
-}
-
-func (p *ConsumerPipeline) Run(ctx context.Context) error {
-    msgCh := make(chan kafka.Message, p.workers*4)
-
-    // Single reader goroutine
-    readerDone := make(chan struct{})
-    go func() {
-        defer close(msgCh)
-        defer close(readerDone)
-        for {
-            msg, err := p.reader.ReadMessage(ctx)
-            if err != nil {
-                if ctx.Err() != nil {
-                    return
-                }
-                p.logger.Error("kafka read", zap.Error(err))
-                select {
-                case <-ctx.Done():
-                    return
-                case <-time.After(2 * time.Second):
-                }
-                continue
-            }
-            select {
-            case msgCh <- msg:
-            case <-ctx.Done():
-                return
-            }
-        }
-    }()
-
-    // Worker pool processes concurrently
-    var wg sync.WaitGroup
-    for i := 0; i < p.workers; i++ {
-        wg.Add(1)
-        go func() {
-            defer wg.Done()
-            batch := make([]Snapshot, 0, 100)
-            ticker := time.NewTicker(500 * time.Millisecond)
-            defer ticker.Stop()
-
-            flush := func() {
-                if len(batch) == 0 {
-                    return
-                }
-                if err := p.store.SaveBatch(ctx, batch); err != nil {
-                    p.logger.Error("batch save", zap.Int("size", len(batch)), zap.Error(err))
-                }
-                batch = batch[:0]
-            }
-
-            for {
-                select {
-                case <-ctx.Done():
-                    flush()
-                    return
-                case <-ticker.C:
-                    flush()
-                case msg, ok := <-msgCh:
-                    if !ok {
-                        flush()
-                        return
-                    }
-                    var snap Snapshot
-                    if err := json.Unmarshal(msg.Value, &snap); err != nil {
-                        p.dlq.Send(ctx, msg, &ParseError{Err: err})
-                        continue
-                    }
-                    batch = append(batch, snap)
-                    if len(batch) >= 100 {
-                        flush()
-                    }
-                }
-            }
-        }()
-    }
-
-    wg.Wait()
-    return nil
-}
-```
-
----
-
-## 6. Metrics About Metrics — Pipeline Self-Observability
-
-The telemetry pipeline must instrument itself. If the pipeline is unhealthy, you can't trust the metrics it produces:
-
-```go
-var (
-    snapshotsEmitted = promauto.NewCounterVec(prometheus.CounterOpts{
-        Name: "archer_telemetry_snapshots_emitted_total",
-        Help: "Total metric snapshots emitted by the pipeline",
-    }, []string{"run_id"})
-
-    kafkaPublishErrors = promauto.NewCounter(prometheus.CounterOpts{
-        Name: "archer_telemetry_kafka_publish_errors_total",
-    })
-
-    collectorBufferDepth = promauto.NewGaugeFunc(prometheus.GaugeOpts{
-        Name: "archer_telemetry_collector_buffer_depth",
-    }, func() float64 { return float64(len(collector.input)) })
-
-    consumerBatchSize = promauto.NewHistogram(prometheus.HistogramOpts{
-        Name:    "archer_telemetry_consumer_batch_size",
-        Buckets: []float64{1, 10, 50, 100, 200, 500},
-    })
-
-    dbWriteLatency = promauto.NewHistogram(prometheus.HistogramOpts{
-        Name:    "archer_telemetry_db_write_duration_seconds",
-        Buckets: prometheus.DefBuckets,
-    })
-)
-```
-
-Alert conditions for the ARCHER telemetry pipeline:
-- `collector_buffer_depth` consistently > 80% capacity → collector is the bottleneck; increase buffer or reduce worker concurrency
-- `kafka_publish_errors_total` rate > 0 → Kafka connectivity issue; check broker health
-- `consumer_batch_size` consistently = 1 → flush interval too short or volume too low; tune
-- `db_write_duration_seconds` p99 > 500ms → DB under pressure; increase connection pool or scale DB
-
----
-
-## 7. Sliding Window Metrics
-
-For the dashboard, raw P95 across the entire run becomes less useful over time. A sliding 30-second window is more actionable:
-
-```go
-// internal/telemetry/window.go
-type SlidingWindow struct {
-    mu       sync.Mutex
-    buckets  []windowBucket  // one bucket per second
-    size     int             // window size in seconds
-    head     int             // current write bucket index
-}
-
-type windowBucket struct {
-    timestamp time.Time
-    latencies []time.Duration
-    errors    int64
-    total     int64
-}
-
-func NewSlidingWindow(sizeSeconds int) *SlidingWindow {
-    return &SlidingWindow{
-        buckets: make([]windowBucket, sizeSeconds),
-        size:    sizeSeconds,
-    }
-}
-
-func (w *SlidingWindow) Record(latency time.Duration, isError bool) {
-    w.mu.Lock()
-    defer w.mu.Unlock()
-    b := &w.buckets[w.head]
-    b.latencies = append(b.latencies, latency)
-    b.total++
-    if isError {
-        b.errors++
-    }
-}
-
-// Advance moves to the next bucket — called every second by a ticker.
-func (w *SlidingWindow) Advance() {
-    w.mu.Lock()
-    defer w.mu.Unlock()
-    w.head = (w.head + 1) % w.size
-    // Clear the bucket being overwritten
-    w.buckets[w.head] = windowBucket{timestamp: time.Now()}
-}
-
-// Snapshot aggregates all active buckets.
-func (w *SlidingWindow) Snapshot() WindowSnapshot {
-    w.mu.Lock()
-    defer w.mu.Unlock()
-
-    var allLats []time.Duration
-    var totalErrors, total int64
-    cutoff := time.Now().Add(-time.Duration(w.size) * time.Second)
-
-    for _, b := range w.buckets {
-        if b.timestamp.Before(cutoff) {
-            continue
-        }
-        allLats = append(allLats, b.latencies...)
-        totalErrors += b.errors
-        total += b.total
-    }
-
-    sortDurations(allLats)
-    return WindowSnapshot{
-        WindowSecs: w.size,
-        Total:      total,
-        Errors:     totalErrors,
-        P95:        percentile(allLats, 0.95),
-        P99:        percentile(allLats, 0.99),
-    }
-}
-```
-
-The sliding window is updated by the collector's `ticker.C` arm — the same goroutine that owns the state, so no additional locking is required when integrated.
-
----
-
-## 8. Prometheus Histogram vs Summary
-
-ARCHER uses Prometheus histograms (not summaries) for latency:
-
-| Property | Histogram | Summary |
-|---|---|---|
-| Percentile calculation | At query time (Grafana/PromQL) | At collection time (in the Go process) |
-| Multi-instance aggregation | `histogram_quantile` across all pods | **Cannot aggregate summaries across instances** |
-| Memory cost | Fixed (bucket count × label cardinality) | Proportional to observation count |
-| Accuracy | Bucket-bounded (configure good buckets) | Configurable quantile error |
-
-For a distributed system with 3+ replicas of the telemetry consumer, only histograms allow correct P95/P99 calculation across all instances. Summaries are local-only.
-
-```go
-var requestLatency = prometheus.NewHistogramVec(
-    prometheus.HistogramOpts{
-        Name: "archer_request_duration_seconds",
-        Help: "HTTP request latency from the load generator's perspective",
-        // Buckets covering 1ms to 30s — tune to your expected latency range
-        Buckets: []float64{.001, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30},
-    },
-    []string{"run_id", "target", "status_class"},
-)
-
-// Record — note status_class not status_code (avoids high cardinality)
-requestLatency.WithLabelValues(
-    runID,
-    targetHost,        // not full URL — avoids cardinality explosion
-    statusClass(code), // "2xx", "4xx", "5xx" — not "200", "404"
-).Observe(latency.Seconds())
-```
-
-PromQL to get P95 across all telemetry consumer pods:
-
-```
-histogram_quantile(0.95,
-    sum(rate(archer_request_duration_seconds_bucket{run_id="run-abc"}[1m]))
-    by (le)
-)
-```
-
----
-
-## 9. The Complete Pipeline Assembly
-
-Wiring all stages together in the load generator's `cmd/loadgen/main.go`:
-
-```go
-func main() {
-    cfg, _ := config.Load()
-    ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
-    defer stop()
-
-    // Infrastructure
-    kafkaProducer, _ := kafka.NewProducer(cfg.Kafka.Brokers, "archer.metrics", logger)
-    wsHub := websocket.NewHub(logger)
-    go wsHub.Run(ctx)
-
-    // Telemetry pipeline stages
-    collector   := telemetry.NewEventCollector(10000)
-    emitter     := telemetry.NewKafkaEmitter(kafkaProducer, 5000, 500, 100*time.Millisecond)
-    broadcaster := telemetry.NewMetricBroadcaster(wsHub)
-    window      := telemetry.NewSlidingWindow(30)
-
-    pipeline := telemetry.NewPipeline(telemetry.PipelineConfig{
-        Collector:   collector,
-        Emitter:     emitter,
-        Broadcaster: broadcaster,
-        Window:      window,
-        RunID:       cfg.RunID,
-        Logger:      logger,
-    })
-
-    // Worker pool
-    pool := loadgen.NewPool(cfg.Concurrency, cfg.Concurrency*2)
-    pool.Start(ctx)
-    pool.OnResult(collector.Collect) // connect pool results to collector
-
-    // Start pipeline
-    go pipeline.Run(ctx)
-
-    // Feed jobs until duration expires
-    runCtx, cancel := context.WithTimeout(ctx, cfg.Duration)
-    defer cancel()
-
-    feedJobs(runCtx, pool, cfg)
-    pool.Close()
-    pool.Wait()
-
-    // Final snapshot
-    finalReport := collector.FinalSnapshot()
-    publishFinalReport(ctx, kafkaProducer, cfg.RunID, finalReport)
-    logger.Info("run complete", zap.Any("report", finalReport))
-}
-```
-
----
-
-## Key Takeaways
-
-1. **Single-goroutine collector = lock-free hot path.** Workers call a buffered channel send; state mutation is sequential.
-2. **Dual-path publishing** — Kafka for durability, WebSocket for real-time. They are independent failure domains.
-3. **Snapshot is a value type** — full copy ensures no data race between producer and consumer.
-4. **Sliding window** for dashboard P95 — more actionable than cumulative-since-run-start.
-5. **Histograms not summaries** — the only correct Prometheus instrument for multi-instance percentile aggregation.
-6. **Pipeline self-observability** — instrument every stage with counters, gauges, and histograms.
-7. **Non-blocking emit path** — telemetry loss is acceptable; benchmark accuracy is not.
-
----
-
-## Common Production Pitfalls
-
-| Pitfall | Consequence | Correct Approach |
-|---|---|---|
-| Mutex on collector hot path | Lock contention at 50k events/s | Single-goroutine collector with channel input |
-| Returning slice reference from snapshot | Data race between snapshot and collector | Copy slices before returning from `buildSnapshot` |
-| Using Prometheus Summary for distributed system | Cannot aggregate across pods | Always use Histogram |
-| High-cardinality status code labels | Prometheus OOM (millions of time series) | Bucket as `2xx`, `4xx`, `5xx` |
-| Blocking emit path | Worker throughput degrades under Kafka pressure | Non-blocking send with drop counter |
-| No pipeline self-metrics | Can't distinguish metric loss from true zero | Instrument every pipeline stage |
-
----
-
-## Production Checklist
-
-- [ ] Collector buffer depth exposed as Prometheus gauge
-- [ ] Kafka publish errors tracked as counter
-- [ ] DB write latency tracked as histogram
-- [ ] Sliding window (30s) for dashboard percentiles
-- [ ] Prometheus histograms with appropriate buckets for expected latency range
-- [ ] Status code labels bucketed (`2xx`/`4xx`/`5xx`) not raw code
-- [ ] Snapshot is a full value copy — no shared references
-- [ ] Dual-path publish: Kafka + WebSocket broadcast
-- [ ] Final snapshot published on run completion
-
----
-
-*Next chapter: Logging, Configuration, and Environment Management — the operational foundation that makes all pipeline components observable and configurable.*
-
-
----
-
-# Chapter 14 — Logging, Configuration, and Environment Management
-
-> **Engineering Learning Booklet | ARCHER Backend Architecture Series**
-> *The operational foundation of a distributed backend: structured observability, typed configuration, and environment-aware deployment.*
-
----
-
-## 1. Why This Matters More Than Most Chapters
-
-Logging and configuration are unglamorous. They are also the difference between a service you can operate in production and one you can only debug locally. In a distributed system like ARCHER with 4+ services, 3+ environments, and concurrent load test runs producing millions of events, the quality of your logs and config architecture determines:
-
-- How quickly you diagnose a production incident
-- Whether your CI/CD pipeline can promote from staging to production safely
-- Whether a new engineer can run the system locally without 3 hours of setup
-- Whether your Kubernetes deployment is environment-aware or hardcoded
-
-Every pattern in this chapter connects directly to the ARCHER operational story.
-
----
-
-## 2. Structured Logging with `zap`
-
-From Chapter 12, ARCHER logs JSON to stdout. Here we build the complete logging system.
-
-### 2.1 Logger Construction
-
-```go
-// internal/logger/logger.go
-package logger
-
-import (
-    "fmt"
-    "os"
-    "strings"
-
-    "go.uber.org/zap"
-    "go.uber.org/zap/zapcore"
-)
-
-type Config struct {
-    Level      string // "debug", "info", "warn", "error"
-    Format     string // "json" (production) or "console" (local dev)
-    CallerSkip int    // skip N stack frames in caller reporting
-}
-
-func New(cfg Config) (*zap.Logger, error) {
-    level, err := zapcore.ParseLevel(strings.ToLower(cfg.Level))
-    if err != nil {
-        return nil, fmt.Errorf("invalid log level %q: %w", cfg.Level, err)
-    }
-
-    var encoder zapcore.Encoder
-    encoderCfg := zap.NewProductionEncoderConfig()
-    encoderCfg.TimeKey = "ts"
-    encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-    encoderCfg.EncodeDuration = zapcore.MillisDurationEncoder
-
-    if cfg.Format == "console" {
-        encoderCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
-        encoder = zapcore.NewConsoleEncoder(encoderCfg)
-    } else {
-        encoder = zapcore.NewJSONEncoder(encoderCfg)
-    }
-
-    core := zapcore.NewCore(
-        encoder,
-        zapcore.AddSync(os.Stdout),
-        level,
-    )
-
-    opts := []zap.Option{
-        zap.AddCaller(),
-        zap.AddCallerSkip(cfg.CallerSkip),
-        zap.AddStacktrace(zapcore.ErrorLevel),
-    }
-
-    return zap.New(core, opts...), nil
-}
-
-// MustNew panics if logger creation fails — acceptable in main().
-func MustNew(cfg Config) *zap.Logger {
-    l, err := New(cfg)
-    if err != nil {
-        panic(fmt.Sprintf("logger init failed: %v", err))
-    }
-    return l
-}
-```
-
-### 2.2 Service-Level Fields
-
-Every log line should carry the service context without repeating it manually:
-
-```go
-// In cmd/api/main.go:
-logger := logger.MustNew(cfg.Log)
-logger = logger.With(
-    zap.String("service", "archer-api"),
-    zap.String("version", version),
-    zap.String("env", cfg.Env), // "production", "staging", "local"
-)
-```
-
-Every subsequent log call from any package receiving this logger will include `service`, `version`, and `env` automatically. In Grafana Loki, you can filter `{service="archer-api", env="production"}` immediately.
-
-### 2.3 Request-Scoped Logging
-
-Attach request-scoped fields to a child logger rather than passing individual fields repeatedly:
-
-```go
-func (h *RunHandlers) CreateRun(w http.ResponseWriter, r *http.Request) {
-    requestID := middleware.RequestIDFromCtx(r.Context())
-
-    // Child logger with request-scoped fields
-    log := h.logger.With(
-        zap.String("request_id", requestID),
-        zap.String("handler", "CreateRun"),
-        zap.String("method", r.Method),
-    )
-
-    var req CreateRunRequest
-    if err := decodeJSON(w, r, &req); err != nil {
-        log.Warn("decode failed", zap.Error(err))
-        return
-    }
-
-    run, err := h.runStore.Create(r.Context(), req.toRun())
-    if err != nil {
-        log.Error("store create failed", zap.Error(err))
-        writeStoreError(w, r, h.logger, err)
-        return
-    }
-
-    log.Info("run created", zap.String("run_id", run.ID))
-    writeJSON(w, http.StatusCreated, run)
-}
-```
-
-All log calls within the handler carry `request_id`, `handler`, and `method` — you can reconstruct the complete request trace from logs alone.
-
-### 2.4 Log Sampling for High-Volume Events
-
-The load generator emits one result per request. At 50k req/s, logging every result floods your log aggregator:
-
-```go
-// zap's built-in sampler: log first N occurrences, then 1-in-M for the rest
-sampledLogger := zap.New(
-    zapcore.NewSamplerWithOptions(
-        core,
-        time.Second,   // sampling window
-        100,           // first 100 per second: always log
-        10,            // after that: 1-in-10
-    ),
-)
-
-// Use for per-request logs in the load generator
-// Use for high-frequency consumer loop logs
-// Keep unsampled logger for errors, warnings, and lifecycle events
-```
-
----
-
-## 3. Configuration Architecture
-
-### 3.1 The Complete Config Struct
-
-```go
-// internal/config/config.go
-package config
-
-import (
-    "fmt"
-    "os"
-    "strings"
-    "time"
-)
-
-type Config struct {
-    Env      string         `yaml:"env"`      // local, staging, production
-    Server   ServerConfig   `yaml:"server"`
-    Database DatabaseConfig `yaml:"database"`
-    Kafka    KafkaConfig    `yaml:"kafka"`
-    Redis    RedisConfig    `yaml:"redis"`
-    Log      LogConfig      `yaml:"log"`
-    Metrics  MetricsConfig  `yaml:"metrics"`
-    Run      RunConfig      `yaml:"run"`      // load test defaults
-}
-
-type ServerConfig struct {
-    Addr              string        `yaml:"addr"`
-    ReadHeaderTimeout time.Duration `yaml:"read_header_timeout"`
-    ReadTimeout       time.Duration `yaml:"read_timeout"`
-    WriteTimeout      time.Duration `yaml:"write_timeout"`
-    IdleTimeout       time.Duration `yaml:"idle_timeout"`
-    ShutdownTimeout   time.Duration `yaml:"shutdown_timeout"`
-    AllowedOrigins    []string      `yaml:"allowed_origins"`
-}
-
-type DatabaseConfig struct {
-    URL             string        `yaml:"url"`
-    MaxOpenConns    int           `yaml:"max_open_conns"`
-    MaxIdleConns    int           `yaml:"max_idle_conns"`
-    ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime"`
-    ConnMaxIdleTime time.Duration `yaml:"conn_max_idle_time"`
-    MigrationsPath  string        `yaml:"migrations_path"`
-}
-
-type KafkaConfig struct {
-    Brokers        []string      `yaml:"brokers"`
-    MetricsTopic   string        `yaml:"metrics_topic"`
-    RunsTopic      string        `yaml:"runs_topic"`
-    GroupID        string        `yaml:"group_id"`
-    BatchSize      int           `yaml:"batch_size"`
-    BatchTimeout   time.Duration `yaml:"batch_timeout"`
-    CommitInterval time.Duration `yaml:"commit_interval"`
-}
-
-type LogConfig struct {
-    Level  string `yaml:"level"`
-    Format string `yaml:"format"` // json or console
-}
-
-type MetricsConfig struct {
-    Enabled bool   `yaml:"enabled"`
-    Addr    string `yaml:"addr"`  // e.g., ":9090" for Prometheus scraping
-}
-```
-
-### 3.2 Loading with Environment Override
-
-```go
-func Load() (*Config, error) {
-    // Step 1: load defaults
-    cfg := defaults()
-
-    // Step 2: overlay from config file if present
-    path := os.Getenv("CONFIG_PATH")
-    if path == "" {
-        path = "configs/api.yaml" // convention-based default
-    }
-    if err := loadYAML(cfg, path); err != nil && !os.IsNotExist(err) {
-        return nil, fmt.Errorf("load config file %s: %w", path, err)
-    }
-
-    // Step 3: overlay from environment variables (highest priority)
-    applyEnv(cfg)
-
-    // Step 4: validate
-    if err := cfg.validate(); err != nil {
-        return nil, fmt.Errorf("config validation: %w", err)
-    }
-
-    return cfg, nil
-}
-
-func applyEnv(cfg *Config) {
-    env := func(key, fallback string) string {
-        if v := os.Getenv(key); v != "" {
-            return v
-        }
-        return fallback
-    }
-
-    cfg.Env                    = env("APP_ENV", cfg.Env)
-    cfg.Server.Addr            = env("SERVER_ADDR", cfg.Server.Addr)
-    cfg.Database.URL           = env("DATABASE_URL", cfg.Database.URL)
-    cfg.Log.Level              = env("LOG_LEVEL", cfg.Log.Level)
-    cfg.Metrics.Addr           = env("METRICS_ADDR", cfg.Metrics.Addr)
-
-    if v := os.Getenv("KAFKA_BROKERS"); v != "" {
-        cfg.Kafka.Brokers = strings.Split(v, ",")
-    }
-    if v := os.Getenv("KAFKA_GROUP_ID"); v != "" {
-        cfg.Kafka.GroupID = v
-    }
-}
-
-func (c *Config) validate() error {
-    if c.Server.Addr == "" {
-        return fmt.Errorf("server.addr is required")
-    }
-    if c.Database.URL == "" {
-        return fmt.Errorf("database.url is required")
-    }
-    if len(c.Kafka.Brokers) == 0 {
-        return fmt.Errorf("kafka.brokers must not be empty")
-    }
-    if c.Server.ShutdownTimeout <= 0 {
-        return fmt.Errorf("server.shutdown_timeout must be > 0")
-    }
-    if c.Database.MaxOpenConns <= 0 {
-        return fmt.Errorf("database.max_open_conns must be > 0")
-    }
-    return nil
-}
-```
-
-### 3.3 Default Config Files per Environment
-
-```
-configs/
-├── api.yaml          # base defaults for all environments
-├── api.staging.yaml  # staging overrides (loaded if APP_ENV=staging)
-└── api.local.yaml    # local dev overrides (loaded if APP_ENV=local)
-```
-
-```yaml
-# configs/api.yaml — production defaults
-env: production
-server:
-  addr: ":8080"
-  read_header_timeout: 2s
-  read_timeout: 5s
-  write_timeout: 15s
-  idle_timeout: 120s
-  shutdown_timeout: 20s
-
-database:
-  max_open_conns: 25
-  max_idle_conns: 5
-  conn_max_lifetime: 5m
-  conn_max_idle_time: 2m
-
-kafka:
-  metrics_topic: archer.metrics
-  runs_topic: archer.runs
-  group_id: archer-api-v1
-  batch_size: 500
-  batch_timeout: 100ms
-  commit_interval: 1s
-
-log:
-  level: info
-  format: json
-
-metrics:
-  enabled: true
-  addr: ":9090"
-```
-
-```yaml
-# configs/api.local.yaml — local development overrides
-env: local
-server:
-  addr: ":8080"
-log:
-  level: debug
-  format: console   # human-readable for local dev
-database:
-  url: postgres://archer:archer@localhost:5432/archer?sslmode=disable
-kafka:
-  brokers: ["localhost:9092"]
-metrics:
-  enabled: false  # don't scrape locally unless needed
-```
-
----
-
-## 4. Environment Management Strategy
-
-### 4.1 The Three-Source Priority
-
-```
-Priority (high → low):
-1. Environment variables    ← Kubernetes Secrets / CI injection
-2. Config file              ← Kubernetes ConfigMap / mounted file
-3. Compiled defaults        ← safe fallback for non-critical settings
-```
-
-Never hardcode environment-specific values in Go source code. If you find yourself writing `const kafkaBroker = "kafka.production.internal:9092"` in application code, that's a config management failure.
-
-### 4.2 Secrets Management
-
-Secrets (database passwords, API keys, TLS certificates) must never appear in:
-- Config YAML files committed to git
-- Docker images
-- Environment variables visible in `docker inspect` output (for truly sensitive values)
-
-Kubernetes pattern:
-
-```yaml
-# Secret — created by CI/CD, not committed to git
-apiVersion: v1
-kind: Secret
-metadata:
-  name: archer-secrets
-type: Opaque
-stringData:
-  database-url: "postgres://archer:REAL_PASSWORD@db.internal:5432/archer"
-  kafka-sasl-password: "REAL_KAFKA_PASSWORD"
-
----
-# Deployment references the secret
-spec:
-  containers:
-  - name: api
-    env:
-    - name: DATABASE_URL
-      valueFrom:
-        secretKeyRef:
-          name: archer-secrets
-          key: database-url
-```
-
-For more sophisticated secret management, use Vault or AWS Secrets Manager with a sidecar injector — but for ARCHER's scope, Kubernetes Secrets are sufficient.
-
-### 4.3 ConfigMap for Non-Secret Configuration
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: archer-api-config
-data:
-  api.yaml: |
-    env: production
-    server:
-      addr: ":8080"
-      shutdown_timeout: 20s
-    kafka:
-      brokers: ["kafka-0.kafka:9092", "kafka-1.kafka:9092"]
-      group_id: archer-api-v1
-    log:
-      level: info
-      format: json
-
----
-spec:
-  containers:
-  - name: api
-    volumeMounts:
-    - name: config
-      mountPath: /etc/archer
-    env:
-    - name: CONFIG_PATH
-      value: /etc/archer/api.yaml
-  volumes:
-  - name: config
-    configMap:
-      name: archer-api-config
-```
-
----
-
-## 5. Dynamic Log Level Without Restart
-
-In production, you sometimes need to temporarily enable `debug` logging to diagnose an issue without restarting the service. `zap`'s `AtomicLevel` supports this:
-
-```go
-// internal/logger/logger.go
-var atomicLevel zap.AtomicLevel
-
-func NewWithAtomicLevel(cfg Config) (*zap.Logger, zap.AtomicLevel, error) {
-    atomicLevel = zap.NewAtomicLevelAt(mustParseLevel(cfg.Level))
-
-    core := zapcore.NewCore(
-        zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
-        zapcore.AddSync(os.Stdout),
-        atomicLevel, // wraps the level — can be changed at runtime
-    )
-    return zap.New(core, zap.AddCaller()), atomicLevel, nil
-}
-```
-
-Expose a HTTP endpoint to change the level at runtime:
-
-```go
-// In buildRoutes():
-// Register zap's built-in HTTP handler for level management
-mux.Handle("PUT /admin/log-level", atomicLevel)
-mux.Handle("GET /admin/log-level", atomicLevel)
-
-// Usage:
-// curl -X PUT http://localhost:8080/admin/log-level -d '{"level":"debug"}'
-// curl -X PUT http://localhost:8080/admin/log-level -d '{"level":"info"}'  ← restore
-```
-
-This endpoint should be on an internal admin port, not the public-facing port. Gate it behind authentication or bind to `127.0.0.1` only.
-
----
-
-## 6. Configuration Validation at Startup
-
-All invalid configuration must be detected and reported at startup — not at first use. Failing fast at startup is better than failing 2 hours into a load test run:
-
-```go
-func (c *Config) validate() error {
-    var errs []string
-
-    if c.Database.MaxOpenConns <= 0 {
-        errs = append(errs, "database.max_open_conns must be > 0")
-    }
-    if c.Server.WriteTimeout <= c.Server.ReadTimeout {
-        errs = append(errs, "server.write_timeout must be > read_timeout")
-    }
-    if c.Kafka.BatchTimeout <= 0 {
-        errs = append(errs, "kafka.batch_timeout must be > 0")
-    }
-    // Validate allowed origins contain at least one entry in non-local env
-    if c.Env != "local" && len(c.Server.AllowedOrigins) == 0 {
-        errs = append(errs, "server.allowed_origins must not be empty in non-local environments")
-    }
-
-    if len(errs) > 0 {
-        return fmt.Errorf("configuration errors:\n  - %s", strings.Join(errs, "\n  - "))
-    }
-    return nil
-}
-```
-
-In `main()`:
-
-```go
-cfg, err := config.Load()
-if err != nil {
-    // Fatal — don't start the service with bad config
-    fmt.Fprintf(os.Stderr, "FATAL: %v\n", err)
-    os.Exit(1)
-}
-```
-
-Use `os.Exit(1)` before the logger is initialized — you can't log if logging isn't set up yet.
-
----
-
-## 7. Logging Discipline Across ARCHER Services
-
-### 7.1 Log Level Guidelines
-
-| Level | Use For |
-|---|---|
-| `debug` | Per-request detail, internal state, channel operations — never in production |
-| `info` | Service lifecycle events, run start/stop, batch flushes, config summary |
-| `warn` | Degraded state (retrying, buffer full, slow consumer) — not failures |
-| `error` | Failures requiring attention — Kafka publish failed, DB write failed |
-| `fatal` | Startup failures only — never in running service code |
-
-```go
-// info: lifecycle events
-logger.Info("kafka consumer started",
-    zap.Strings("brokers", cfg.Kafka.Brokers),
-    zap.String("topic", cfg.Kafka.MetricsTopic),
-    zap.String("group_id", cfg.Kafka.GroupID),
-)
-
-// warn: degraded but continuing
-logger.Warn("collector buffer near capacity",
-    zap.Int("current", len(collector.input)),
-    zap.Int("capacity", cap(collector.input)),
-    zap.Float64("utilization", float64(len(collector.input))/float64(cap(collector.input))),
-)
-
-// error: actionable failure
-logger.Error("kafka publish failed",
-    zap.String("run_id", runID),
-    zap.Int("batch_size", len(batch)),
-    zap.Duration("retry_after", backoff),
-    zap.Error(err),
-)
-```
-
-### 7.2 What Never to Log
-
-- Passwords, API keys, connection strings (even partially)
-- Full HTTP request/response bodies (use sampling or truncation)
-- PII / user data (even in debug mode)
-- Stack traces at `info` level — they belong at `error` and above
-
-```go
-// WRONG — logs the full database URL including password
-logger.Info("database connected", zap.String("url", cfg.Database.URL))
-
-// CORRECT — log only the host/db, not credentials
-u, _ := url.Parse(cfg.Database.URL)
-logger.Info("database connected",
-    zap.String("host", u.Host),
-    zap.String("database", strings.TrimPrefix(u.Path, "/")),
-)
-```
-
----
-
-## 8. Configuration Logging at Startup
-
-Always log the effective configuration at startup (excluding secrets):
-
-```go
-func logStartupConfig(logger *zap.Logger, cfg *config.Config) {
-    logger.Info("service configuration",
-        zap.String("env", cfg.Env),
-        zap.String("server_addr", cfg.Server.Addr),
-        zap.Duration("shutdown_timeout", cfg.Server.ShutdownTimeout),
-        zap.Strings("kafka_brokers", cfg.Kafka.Brokers),
-        zap.String("kafka_group_id", cfg.Kafka.GroupID),
-        zap.String("log_level", cfg.Log.Level),
-        zap.Int("db_max_open_conns", cfg.Database.MaxOpenConns),
-        zap.Bool("metrics_enabled", cfg.Metrics.Enabled),
-        // NOT: zap.String("database_url", cfg.Database.URL)
-    )
-}
-```
-
-This single log line is invaluable during incident triage: "what configuration was the service running when it started?"
-
----
-
-## Key Takeaways
-
-1. **JSON to stdout** — the only correct log format for containerized services.
-2. **Child loggers with `With()`** — carry request-scoped fields without manual repetition.
-3. **Three-source config priority**: env vars > config file > compiled defaults.
-4. **Fail fast on bad config** — validate everything at startup before initializing any connection.
-5. **Dynamic log level** via `zap.AtomicLevel` — diagnose production issues without restarts.
-6. **Log the effective config at startup** (excluding secrets) — critical for incident triage.
-7. **Secrets via Kubernetes Secrets** — never in config YAML or source code.
-
----
-
-## Common Production Pitfalls
-
-| Pitfall | Consequence | Correct Approach |
-|---|---|---|
-| Logging at `info` per request at 50k rps | Log aggregator overwhelmed | Sample with `zapcore.NewSamplerWithOptions` |
-| Logging database URL with password | Secret leak in logs | Parse URL; log host and dbname only |
-| `log.Fatal` in a running service | Process killed mid-run | Use `log.Error`; return error to caller |
-| Hardcoded addresses in source | Binary needs rebuild per environment | Environment variable with config overlay |
-| Config validation skipped | Crash 2 hours into a run on first use | Validate all fields at startup |
-| Unstructured `fmt.Printf` in library code | Breaks log aggregation | Accept `*zap.Logger` as dependency; no global logger |
-| Separate config struct per service | Config drift; secrets in wrong places | Single shared config package; service-specific sub-structs |
-
----
-
-## Production Checklist
-
-- [ ] `zap.Logger` passed as dependency — no global logger in library packages
-- [ ] JSON format in production; console format in local dev
-- [ ] Service-level fields (`service`, `version`, `env`) attached via `logger.With()`
-- [ ] Request-scoped child loggers in HTTP handlers
-- [ ] Log level sampler for high-frequency events (> 1000/s)
-- [ ] `zap.AtomicLevel` with HTTP endpoint for runtime level change
-- [ ] Config validated completely at startup; `os.Exit(1)` on failure
-- [ ] Effective config (excluding secrets) logged at startup
-- [ ] Database URL logged as host+dbname only — never the full URL
-- [ ] Secrets in Kubernetes Secrets, not ConfigMap or source
-
----
-
-*Next chapter: Graceful Shutdown and Production Service Lifecycle — the complete lifecycle of an ARCHER service from startup to SIGKILL, including dependency ordering and drain verification.*
