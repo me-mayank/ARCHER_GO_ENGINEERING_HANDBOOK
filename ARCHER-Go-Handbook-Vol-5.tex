@@ -1,0 +1,2627 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[
+]{article}
+\usepackage{amsmath,amssymb}
+\usepackage{lmodern}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\newenvironment{Shaded}{}{}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.49,0.56,0.16}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\BuiltInTok}[1]{\textcolor[rgb]{0.00,0.50,0.00}{#1}}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textit{#1}}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.53,0.00,0.00}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.56,0.13,0.00}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.73,0.13,0.13}{\textit{#1}}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.02,0.16,0.49}{#1}}
+\newcommand{\ImportTok}[1]{\textcolor[rgb]{0.00,0.50,0.00}{\textbf{#1}}}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.40,0.40,0.40}{#1}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.74,0.48,0.00}{#1}}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.73,0.40,0.53}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.10,0.09,0.49}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\usepackage{longtable,booktabs,array}
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\ifLuaTeX
+  \usepackage{selnolig}  % disable illegal ligatures
+\fi
+\IfFileExists{bookmark.sty}{\usepackage{bookmark}}{\usepackage{hyperref}}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same} % disable monospaced font for URLs
+\hypersetup{
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+\author{}
+\date{}
+
+\begin{document}
+
+\hypertarget{archer-go-engineering-handbook}{%
+\section{ARCHER Go Engineering
+Handbook}\label{archer-go-engineering-handbook}}
+
+\hypertarget{volume-5}{%
+\subsection{Volume 5}\label{volume-5}}
+
+\hypertarget{high-performance-distributed-architecture-and-archer-systems-design}{%
+\subsubsection{High-Performance Distributed Architecture and ARCHER
+Systems
+Design}\label{high-performance-distributed-architecture-and-archer-systems-design}}
+
+\hypertarget{mayank-tripathi}{%
+\paragraph{Mayank Tripathi}\label{mayank-tripathi}}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\begin{quote}
+\emph{Volume 5 of 5 --- The ARCHER Go Engineering Handbook Series}
+
+\emph{A production-grade distributed systems engineering curriculum for
+backend engineers building infrastructure in Go.}
+\end{quote}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{preface-volume-5}{%
+\subsection{Preface --- Volume 5}\label{preface-volume-5}}
+
+Volume 5 is the capstone. It does not introduce new infrastructure
+components. It synthesizes everything built across the previous four
+volumes, pushes the architecture to its performance limits, and teaches
+the engineering mindset required to operate it under production
+conditions.
+
+The background workers chapter addresses a problem that every
+long-running backend must solve: how do you manage services that must
+run continuously, recover from failure automatically, and report health
+accurately? The \texttt{Worker} interface and \texttt{Orchestrator}
+pattern provide a uniform answer --- each background service implements
+\texttt{Name()} and \texttt{Run(ctx)}, declares a restart policy (Never,
+OnFailure, Always), and is supervised by the orchestrator with
+exponential backoff and jitter. The \texttt{RunManager} applies this
+pattern to load test runs specifically: run-scoped contexts, user abort
+via \texttt{cancel()}, and cleanup that uses
+\texttt{context.Background()} after the run context has expired.
+
+The real-time systems chapter examines the ARCHER latency budget in
+precise terms. The WebSocket path from worker result to browser frame
+must be under 70ms end-to-end. The Kafka-to-DB path is under 665ms.
+These two paths are independent failure domains --- a slow database
+write must never delay a dashboard update. The chapter covers the event
+sourcing mental model, fixed-interval tickers vs debounce, slow-client
+backpressure isolation, reconnection state recovery, and in-process
+alert detection with deduplication.
+
+Chapter 19 is the architectural synthesis. Every component built across
+19 chapters is mapped into a single coherent view: the complete data
+flow from load generator goroutine to browser WebSocket frame, the
+goroutine topology of each binary, the channel ownership map for every
+inter-goroutine communication path, the error propagation map from every
+failure mode, the Kafka event flow, the Kubernetes deployment topology,
+and the complete SIGTERM-to-exit shutdown timeline. This chapter is a
+reference you will return to whenever you need to reason about the whole
+system.
+
+Chapter 20 is about something no API reference teaches: how strong
+engineers think. Failure mode analysis before writing code. The three
+questions before any change. Operational simplicity as a design
+constraint. The ``follow the data'' debugging discipline. Explicit
+tradeoff documentation. The five-day hackathon build sequence. The
+concurrency mental checklist. The 40-item production readiness audit.
+These are the habits and practices that separate a system that works in
+a demo from one that works at 3am under load.
+
+\textbf{Chapters in this volume:}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.2333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4667}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+Chapter
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Title
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Core Concept
+\end{minipage} \\
+\midrule()
+\endhead
+17 & Building Scalable Background Workers in Go & Worker interface,
+Orchestrator, retry with jitter, RunManager \\
+18 & Real-Time Systems Design in Go & Latency budget, event sourcing,
+backpressure isolation, alert detection \\
+19 & How the Complete ARCHER Backend Architecture Fits Together & Full
+system synthesis: data flow, goroutine topology, deployment,
+observability \\
+20 & Production Engineering Mindset for Distributed Systems & Failure
+thinking, debugging discipline, tradeoffs, production readiness audit \\
+\bottomrule()
+\end{longtable}
+
+\textbf{Companion volumes:} - \emph{Volume 1} --- Foundations of Go
+Systems Engineering (Chapters 1--4) - \emph{Volume 2} --- Concurrency,
+Worker Systems, and Go Runtime Thinking (Chapters 5--8) - \emph{Volume
+3} --- APIs, WebSockets, Kafka, and Distributed Communication (Chapters
+9--12) - \emph{Volume 4} --- Telemetry, Infrastructure Systems, and
+Production Backend Engineering (Chapters 13--16)
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{table-of-contents-volume-5}{%
+\subsection{Table of Contents --- Volume
+5}\label{table-of-contents-volume-5}}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\setcounter{enumi}{16}
+\tightlist
+\item
+  \protect\hyperlink{chapter-17--building-scalable-background-workers-in-go}{Building
+  Scalable Background Workers in Go}
+\item
+  \protect\hyperlink{chapter-18--real-time-systems-design-in-go}{Real-Time
+  Systems Design in Go}
+\item
+  \protect\hyperlink{chapter-19--how-the-complete-archer-backend-architecture-fits-together}{How
+  the Complete ARCHER Backend Architecture Fits Together}
+\item
+  \protect\hyperlink{chapter-20--production-engineering-mindset-for-distributed-systems}{Production
+  Engineering Mindset for Distributed Systems}
+\end{enumerate}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{chapter-17-building-scalable-background-workers-in-go}{%
+\section{Chapter 17 --- Building Scalable Background Workers in
+Go}\label{chapter-17-building-scalable-background-workers-in-go}}
+
+\begin{quote}
+\textbf{Engineering Learning Booklet \textbar{} ARCHER Backend
+Architecture Series} \emph{Durable job orchestration, retry semantics,
+worker health, and distributed task coordination for production
+backends.}
+\end{quote}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{background-workers-vs-request-handlers}{%
+\subsection{1. Background Workers vs Request
+Handlers}\label{background-workers-vs-request-handlers}}
+
+An HTTP request handler lives for milliseconds --- it reads a request,
+computes a response, and exits. A background worker lives for the
+lifetime of the service --- it continuously processes work from a queue,
+recovers from failures, and reports health.
+
+The ARCHER platform has several background worker categories:
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+Worker Type
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Trigger
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Lifetime
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Failure Behavior
+\end{minipage} \\
+\midrule()
+\endhead
+Load Test Runner & API request & Duration of run (seconds--hours) &
+Cancel run; report failure \\
+Kafka Telemetry Consumer & Service start & Process lifetime & Restart
+with backoff \\
+Metric Aggregator & Ticker (1s) & Process lifetime & Log error;
+continue \\
+Report Generator & Run completion event & Seconds & Retry 3×; mark
+failed \\
+WebSocket Broadcaster & Run start & Duration of run & Stop broadcasting;
+clients reconnect \\
+\bottomrule()
+\end{longtable}
+
+Each type has different lifecycle, restart, and failure semantics. This
+chapter builds the orchestration layer that manages them all.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{the-worker-interface}{%
+\subsection{2. The Worker Interface}\label{the-worker-interface}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{// internal/worker/worker.go}
+\KeywordTok{package}\NormalTok{ worker}
+
+\KeywordTok{import} \StringTok{"context"}
+
+\CommentTok{// Worker is the interface for all background task executors in ARCHER.}
+\KeywordTok{type}\NormalTok{ Worker }\KeywordTok{interface} \OperatorTok{\{}
+\NormalTok{    Name}\OperatorTok{()} \DataTypeTok{string}
+\NormalTok{    Run}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{)} \DataTypeTok{error}
+\OperatorTok{\}}
+
+\CommentTok{// RestartPolicy controls how a failed worker is handled.}
+\KeywordTok{type}\NormalTok{ RestartPolicy }\DataTypeTok{int}
+
+\KeywordTok{const} \OperatorTok{(}
+\NormalTok{    RestartNever      RestartPolicy }\OperatorTok{=} \OtherTok{iota} \CommentTok{// run once; don\textquotesingle{}t restart on error}
+\NormalTok{    RestartOnFailure                       }\CommentTok{// restart only if error != nil}
+\NormalTok{    RestartAlways                          }\CommentTok{// restart regardless of exit reason}
+\OperatorTok{)}
+
+\CommentTok{// WorkerSpec describes a worker and its operational parameters.}
+\KeywordTok{type}\NormalTok{ WorkerSpec }\KeywordTok{struct} \OperatorTok{\{}
+\NormalTok{    Worker        Worker}
+\NormalTok{    Policy        RestartPolicy}
+\NormalTok{    MaxRestarts   }\DataTypeTok{int}           \CommentTok{// 0 = unlimited}
+\NormalTok{    InitialDelay  time}\OperatorTok{.}\NormalTok{Duration }\CommentTok{// backoff before first restart}
+\NormalTok{    MaxDelay      time}\OperatorTok{.}\NormalTok{Duration }\CommentTok{// cap on backoff}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{the-orchestrator}{%
+\subsection{3. The Orchestrator}\label{the-orchestrator}}
+
+The orchestrator manages multiple workers, their lifecycles, restart
+policies, and health state:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{// internal/worker/orchestrator.go}
+\KeywordTok{package}\NormalTok{ worker}
+
+\KeywordTok{import} \OperatorTok{(}
+    \StringTok{"context"}
+    \StringTok{"sync"}
+    \StringTok{"time"}
+    \StringTok{"go.uber.org/zap"}
+\OperatorTok{)}
+
+\KeywordTok{type}\NormalTok{ workerState }\KeywordTok{struct} \OperatorTok{\{}
+\NormalTok{    spec     WorkerSpec}
+\NormalTok{    restarts }\DataTypeTok{int}
+\NormalTok{    healthy  }\DataTypeTok{bool}
+\NormalTok{    lastErr  }\DataTypeTok{error}
+\NormalTok{    mu       sync}\OperatorTok{.}\NormalTok{RWMutex}
+\OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{s }\OperatorTok{*}\NormalTok{workerState}\OperatorTok{)}\NormalTok{ setHealth}\OperatorTok{(}\NormalTok{healthy }\DataTypeTok{bool}\OperatorTok{,}\NormalTok{ err }\DataTypeTok{error}\OperatorTok{)} \OperatorTok{\{}
+\NormalTok{    s}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{Lock}\OperatorTok{()}
+    \ControlFlowTok{defer}\NormalTok{ s}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{Unlock}\OperatorTok{()}
+\NormalTok{    s}\OperatorTok{.}\NormalTok{healthy }\OperatorTok{=}\NormalTok{ healthy}
+\NormalTok{    s}\OperatorTok{.}\NormalTok{lastErr }\OperatorTok{=}\NormalTok{ err}
+\OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{s }\OperatorTok{*}\NormalTok{workerState}\OperatorTok{)}\NormalTok{ isHealthy}\OperatorTok{()} \DataTypeTok{bool} \OperatorTok{\{}
+\NormalTok{    s}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{RLock}\OperatorTok{()}
+    \ControlFlowTok{defer}\NormalTok{ s}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{RUnlock}\OperatorTok{()}
+    \ControlFlowTok{return}\NormalTok{ s}\OperatorTok{.}\NormalTok{healthy}
+\OperatorTok{\}}
+
+\KeywordTok{type}\NormalTok{ Orchestrator }\KeywordTok{struct} \OperatorTok{\{}
+\NormalTok{    workers }\OperatorTok{[]*}\NormalTok{workerState}
+\NormalTok{    logger  }\OperatorTok{*}\NormalTok{zap}\OperatorTok{.}\NormalTok{Logger}
+\NormalTok{    wg      sync}\OperatorTok{.}\NormalTok{WaitGroup}
+\OperatorTok{\}}
+
+\KeywordTok{func}\NormalTok{ NewOrchestrator}\OperatorTok{(}\NormalTok{logger }\OperatorTok{*}\NormalTok{zap}\OperatorTok{.}\NormalTok{Logger}\OperatorTok{)} \OperatorTok{*}\NormalTok{Orchestrator }\OperatorTok{\{}
+    \ControlFlowTok{return} \OperatorTok{\&}\NormalTok{Orchestrator}\OperatorTok{\{}\NormalTok{logger}\OperatorTok{:}\NormalTok{ logger}\OperatorTok{\}}
+\OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{o }\OperatorTok{*}\NormalTok{Orchestrator}\OperatorTok{)}\NormalTok{ Register}\OperatorTok{(}\NormalTok{specs }\OperatorTok{...}\NormalTok{WorkerSpec}\OperatorTok{)} \OperatorTok{\{}
+    \ControlFlowTok{for}\NormalTok{ \_}\OperatorTok{,}\NormalTok{ spec }\OperatorTok{:=} \KeywordTok{range}\NormalTok{ specs }\OperatorTok{\{}
+\NormalTok{        o}\OperatorTok{.}\NormalTok{workers }\OperatorTok{=} \BuiltInTok{append}\OperatorTok{(}\NormalTok{o}\OperatorTok{.}\NormalTok{workers}\OperatorTok{,} \OperatorTok{\&}\NormalTok{workerState}\OperatorTok{\{}\NormalTok{spec}\OperatorTok{:}\NormalTok{ spec}\OperatorTok{,}\NormalTok{ healthy}\OperatorTok{:} \OtherTok{false}\OperatorTok{\})}
+    \OperatorTok{\}}
+\OperatorTok{\}}
+
+\CommentTok{// Run starts all registered workers and supervises them per their RestartPolicy.}
+\KeywordTok{func} \OperatorTok{(}\NormalTok{o }\OperatorTok{*}\NormalTok{Orchestrator}\OperatorTok{)}\NormalTok{ Run}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{)} \OperatorTok{\{}
+    \ControlFlowTok{for}\NormalTok{ \_}\OperatorTok{,}\NormalTok{ state }\OperatorTok{:=} \KeywordTok{range}\NormalTok{ o}\OperatorTok{.}\NormalTok{workers }\OperatorTok{\{}
+\NormalTok{        state }\OperatorTok{:=}\NormalTok{ state}
+\NormalTok{        o}\OperatorTok{.}\NormalTok{wg}\OperatorTok{.}\NormalTok{Add}\OperatorTok{(}\DecValTok{1}\OperatorTok{)}
+        \ControlFlowTok{go} \KeywordTok{func}\OperatorTok{()} \OperatorTok{\{}
+            \ControlFlowTok{defer}\NormalTok{ o}\OperatorTok{.}\NormalTok{wg}\OperatorTok{.}\NormalTok{Done}\OperatorTok{()}
+\NormalTok{            o}\OperatorTok{.}\NormalTok{supervise}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{,}\NormalTok{ state}\OperatorTok{)}
+        \OperatorTok{\}()}
+    \OperatorTok{\}}
+\NormalTok{    o}\OperatorTok{.}\NormalTok{wg}\OperatorTok{.}\NormalTok{Wait}\OperatorTok{()}
+\OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{o }\OperatorTok{*}\NormalTok{Orchestrator}\OperatorTok{)}\NormalTok{ supervise}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ state }\OperatorTok{*}\NormalTok{workerState}\OperatorTok{)} \OperatorTok{\{}
+\NormalTok{    delay }\OperatorTok{:=}\NormalTok{ state}\OperatorTok{.}\NormalTok{spec}\OperatorTok{.}\NormalTok{InitialDelay}
+    \ControlFlowTok{if}\NormalTok{ delay }\OperatorTok{==} \DecValTok{0} \OperatorTok{\{}
+\NormalTok{        delay }\OperatorTok{=}\NormalTok{ time}\OperatorTok{.}\NormalTok{Second}
+    \OperatorTok{\}}
+
+    \ControlFlowTok{for} \OperatorTok{\{}
+\NormalTok{        state}\OperatorTok{.}\NormalTok{setHealth}\OperatorTok{(}\OtherTok{true}\OperatorTok{,} \OtherTok{nil}\OperatorTok{)}
+\NormalTok{        o}\OperatorTok{.}\NormalTok{logger}\OperatorTok{.}\NormalTok{Info}\OperatorTok{(}\StringTok{"worker starting"}\OperatorTok{,}\NormalTok{ zap}\OperatorTok{.}\NormalTok{String}\OperatorTok{(}\StringTok{"worker"}\OperatorTok{,}\NormalTok{ state}\OperatorTok{.}\NormalTok{spec}\OperatorTok{.}\NormalTok{Worker}\OperatorTok{.}\NormalTok{Name}\OperatorTok{()))}
+
+\NormalTok{        err }\OperatorTok{:=}\NormalTok{ state}\OperatorTok{.}\NormalTok{spec}\OperatorTok{.}\NormalTok{Worker}\OperatorTok{.}\NormalTok{Run}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{)}
+
+\NormalTok{        state}\OperatorTok{.}\NormalTok{setHealth}\OperatorTok{(}\OtherTok{false}\OperatorTok{,}\NormalTok{ err}\OperatorTok{)}
+
+        \CommentTok{// Clean context cancellation — shutdown, not failure}
+        \ControlFlowTok{if}\NormalTok{ ctx}\OperatorTok{.}\NormalTok{Err}\OperatorTok{()} \OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
+\NormalTok{            o}\OperatorTok{.}\NormalTok{logger}\OperatorTok{.}\NormalTok{Info}\OperatorTok{(}\StringTok{"worker stopped cleanly"}\OperatorTok{,}\NormalTok{ zap}\OperatorTok{.}\NormalTok{String}\OperatorTok{(}\StringTok{"worker"}\OperatorTok{,}\NormalTok{ state}\OperatorTok{.}\NormalTok{spec}\OperatorTok{.}\NormalTok{Worker}\OperatorTok{.}\NormalTok{Name}\OperatorTok{()))}
+            \ControlFlowTok{return}
+        \OperatorTok{\}}
+
+        \CommentTok{// Check restart policy}
+        \ControlFlowTok{if}\NormalTok{ state}\OperatorTok{.}\NormalTok{spec}\OperatorTok{.}\NormalTok{Policy }\OperatorTok{==}\NormalTok{ RestartNever }\OperatorTok{\{}
+            \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
+\NormalTok{                o}\OperatorTok{.}\NormalTok{logger}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\StringTok{"worker failed (no restart)"}\OperatorTok{,}\NormalTok{ zap}\OperatorTok{.}\NormalTok{String}\OperatorTok{(}\StringTok{"worker"}\OperatorTok{,}\NormalTok{ state}\OperatorTok{.}\NormalTok{spec}\OperatorTok{.}\NormalTok{Worker}\OperatorTok{.}\NormalTok{Name}\OperatorTok{()),}\NormalTok{ zap}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\NormalTok{err}\OperatorTok{))}
+            \OperatorTok{\}}
+            \ControlFlowTok{return}
+        \OperatorTok{\}}
+        \ControlFlowTok{if}\NormalTok{ state}\OperatorTok{.}\NormalTok{spec}\OperatorTok{.}\NormalTok{Policy }\OperatorTok{==}\NormalTok{ RestartOnFailure }\OperatorTok{\&\&}\NormalTok{ err }\OperatorTok{==} \OtherTok{nil} \OperatorTok{\{}
+\NormalTok{            o}\OperatorTok{.}\NormalTok{logger}\OperatorTok{.}\NormalTok{Info}\OperatorTok{(}\StringTok{"worker exited cleanly (no restart)"}\OperatorTok{,}\NormalTok{ zap}\OperatorTok{.}\NormalTok{String}\OperatorTok{(}\StringTok{"worker"}\OperatorTok{,}\NormalTok{ state}\OperatorTok{.}\NormalTok{spec}\OperatorTok{.}\NormalTok{Worker}\OperatorTok{.}\NormalTok{Name}\OperatorTok{()))}
+            \ControlFlowTok{return}
+        \OperatorTok{\}}
+
+\NormalTok{        state}\OperatorTok{.}\NormalTok{restarts}\OperatorTok{++}
+        \ControlFlowTok{if}\NormalTok{ state}\OperatorTok{.}\NormalTok{spec}\OperatorTok{.}\NormalTok{MaxRestarts }\OperatorTok{\textgreater{}} \DecValTok{0} \OperatorTok{\&\&}\NormalTok{ state}\OperatorTok{.}\NormalTok{restarts }\OperatorTok{\textgreater{}}\NormalTok{ state}\OperatorTok{.}\NormalTok{spec}\OperatorTok{.}\NormalTok{MaxRestarts }\OperatorTok{\{}
+\NormalTok{            o}\OperatorTok{.}\NormalTok{logger}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\StringTok{"worker exceeded max restarts"}\OperatorTok{,}
+\NormalTok{                zap}\OperatorTok{.}\NormalTok{String}\OperatorTok{(}\StringTok{"worker"}\OperatorTok{,}\NormalTok{ state}\OperatorTok{.}\NormalTok{spec}\OperatorTok{.}\NormalTok{Worker}\OperatorTok{.}\NormalTok{Name}\OperatorTok{()),}
+\NormalTok{                zap}\OperatorTok{.}\NormalTok{Int}\OperatorTok{(}\StringTok{"restarts"}\OperatorTok{,}\NormalTok{ state}\OperatorTok{.}\NormalTok{restarts}\OperatorTok{),}
+\NormalTok{                zap}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\NormalTok{err}\OperatorTok{),}
+            \OperatorTok{)}
+            \ControlFlowTok{return}
+        \OperatorTok{\}}
+
+\NormalTok{        o}\OperatorTok{.}\NormalTok{logger}\OperatorTok{.}\NormalTok{Warn}\OperatorTok{(}\StringTok{"worker restarting"}\OperatorTok{,}
+\NormalTok{            zap}\OperatorTok{.}\NormalTok{String}\OperatorTok{(}\StringTok{"worker"}\OperatorTok{,}\NormalTok{ state}\OperatorTok{.}\NormalTok{spec}\OperatorTok{.}\NormalTok{Worker}\OperatorTok{.}\NormalTok{Name}\OperatorTok{()),}
+\NormalTok{            zap}\OperatorTok{.}\NormalTok{Int}\OperatorTok{(}\StringTok{"restart"}\OperatorTok{,}\NormalTok{ state}\OperatorTok{.}\NormalTok{restarts}\OperatorTok{),}
+\NormalTok{            zap}\OperatorTok{.}\NormalTok{Duration}\OperatorTok{(}\StringTok{"backoff"}\OperatorTok{,}\NormalTok{ delay}\OperatorTok{),}
+\NormalTok{            zap}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\NormalTok{err}\OperatorTok{),}
+        \OperatorTok{)}
+
+        \ControlFlowTok{select} \OperatorTok{\{}
+        \ControlFlowTok{case} \OperatorTok{\textless{}{-}}\NormalTok{ctx}\OperatorTok{.}\NormalTok{Done}\OperatorTok{():}
+            \ControlFlowTok{return}
+        \ControlFlowTok{case} \OperatorTok{\textless{}{-}}\NormalTok{time}\OperatorTok{.}\NormalTok{After}\OperatorTok{(}\NormalTok{delay}\OperatorTok{):}
+        \OperatorTok{\}}
+
+        \CommentTok{// Exponential backoff with cap}
+\NormalTok{        delay }\OperatorTok{=}\NormalTok{ min}\OperatorTok{(}\NormalTok{delay}\OperatorTok{*}\DecValTok{2}\OperatorTok{,}\NormalTok{ state}\OperatorTok{.}\NormalTok{spec}\OperatorTok{.}\NormalTok{MaxDelay}\OperatorTok{)}
+    \OperatorTok{\}}
+\OperatorTok{\}}
+
+\CommentTok{// Wait blocks until all workers have exited.}
+\KeywordTok{func} \OperatorTok{(}\NormalTok{o }\OperatorTok{*}\NormalTok{Orchestrator}\OperatorTok{)}\NormalTok{ Wait}\OperatorTok{()} \OperatorTok{\{}\NormalTok{ o}\OperatorTok{.}\NormalTok{wg}\OperatorTok{.}\NormalTok{Wait}\OperatorTok{()} \OperatorTok{\}}
+
+\CommentTok{// HealthSummary returns health status of all workers.}
+\KeywordTok{func} \OperatorTok{(}\NormalTok{o }\OperatorTok{*}\NormalTok{Orchestrator}\OperatorTok{)}\NormalTok{ HealthSummary}\OperatorTok{()} \KeywordTok{map}\OperatorTok{[}\DataTypeTok{string}\OperatorTok{]}\DataTypeTok{bool} \OperatorTok{\{}
+\NormalTok{    summary }\OperatorTok{:=} \BuiltInTok{make}\OperatorTok{(}\KeywordTok{map}\OperatorTok{[}\DataTypeTok{string}\OperatorTok{]}\DataTypeTok{bool}\OperatorTok{)}
+    \ControlFlowTok{for}\NormalTok{ \_}\OperatorTok{,}\NormalTok{ s }\OperatorTok{:=} \KeywordTok{range}\NormalTok{ o}\OperatorTok{.}\NormalTok{workers }\OperatorTok{\{}
+\NormalTok{        summary}\OperatorTok{[}\NormalTok{s}\OperatorTok{.}\NormalTok{spec}\OperatorTok{.}\NormalTok{Worker}\OperatorTok{.}\NormalTok{Name}\OperatorTok{()]} \OperatorTok{=}\NormalTok{ s}\OperatorTok{.}\NormalTok{isHealthy}\OperatorTok{()}
+    \OperatorTok{\}}
+    \ControlFlowTok{return}\NormalTok{ summary}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+Usage in \texttt{main()}:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{orch }\OperatorTok{:=}\NormalTok{ worker}\OperatorTok{.}\NormalTok{NewOrchestrator}\OperatorTok{(}\NormalTok{logger}\OperatorTok{)}
+
+\NormalTok{orch}\OperatorTok{.}\NormalTok{Register}\OperatorTok{(}
+\NormalTok{    worker}\OperatorTok{.}\NormalTok{WorkerSpec}\OperatorTok{\{}
+\NormalTok{        Worker}\OperatorTok{:}\NormalTok{ kafka}\OperatorTok{.}\NormalTok{NewConsumerWorker}\OperatorTok{(}\NormalTok{cfg}\OperatorTok{.}\NormalTok{Kafka}\OperatorTok{,}\NormalTok{ metricStore}\OperatorTok{,}\NormalTok{ logger}\OperatorTok{),}
+\NormalTok{        Policy}\OperatorTok{:}\NormalTok{ worker}\OperatorTok{.}\NormalTok{RestartOnFailure}\OperatorTok{,}
+\NormalTok{        MaxRestarts}\OperatorTok{:}  \DecValTok{10}\OperatorTok{,}
+\NormalTok{        InitialDelay}\OperatorTok{:}\NormalTok{ time}\OperatorTok{.}\NormalTok{Second}\OperatorTok{,}
+\NormalTok{        MaxDelay}\OperatorTok{:}     \DecValTok{30} \OperatorTok{*}\NormalTok{ time}\OperatorTok{.}\NormalTok{Second}\OperatorTok{,}
+    \OperatorTok{\},}
+\NormalTok{    worker}\OperatorTok{.}\NormalTok{WorkerSpec}\OperatorTok{\{}
+\NormalTok{        Worker}\OperatorTok{:}\NormalTok{ telemetry}\OperatorTok{.}\NormalTok{NewPipelineWorker}\OperatorTok{(}\NormalTok{pipeline}\OperatorTok{),}
+\NormalTok{        Policy}\OperatorTok{:}\NormalTok{ worker}\OperatorTok{.}\NormalTok{RestartOnFailure}\OperatorTok{,}
+\NormalTok{        MaxRestarts}\OperatorTok{:}  \DecValTok{5}\OperatorTok{,}
+\NormalTok{        InitialDelay}\OperatorTok{:} \DecValTok{500} \OperatorTok{*}\NormalTok{ time}\OperatorTok{.}\NormalTok{Millisecond}\OperatorTok{,}
+\NormalTok{        MaxDelay}\OperatorTok{:}     \DecValTok{10} \OperatorTok{*}\NormalTok{ time}\OperatorTok{.}\NormalTok{Second}\OperatorTok{,}
+    \OperatorTok{\},}
+\NormalTok{    worker}\OperatorTok{.}\NormalTok{WorkerSpec}\OperatorTok{\{}
+\NormalTok{        Worker}\OperatorTok{:}\NormalTok{ websocket}\OperatorTok{.}\NormalTok{NewHubWorker}\OperatorTok{(}\NormalTok{hub}\OperatorTok{),}
+\NormalTok{        Policy}\OperatorTok{:}\NormalTok{ worker}\OperatorTok{.}\NormalTok{RestartAlways}\OperatorTok{,}
+\NormalTok{        MaxRestarts}\OperatorTok{:} \DecValTok{0}\OperatorTok{,} \CommentTok{// unlimited — hub must always be running}
+    \OperatorTok{\},}
+\OperatorTok{)}
+
+\ControlFlowTok{go}\NormalTok{ orch}\OperatorTok{.}\NormalTok{Run}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{implementing-workers}{%
+\subsection{4. Implementing Workers}\label{implementing-workers}}
+
+Each background function wraps in a struct implementing the
+\texttt{Worker} interface:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{// internal/kafka/consumer\_worker.go}
+\KeywordTok{type}\NormalTok{ ConsumerWorker }\KeywordTok{struct} \OperatorTok{\{}
+\NormalTok{    consumer }\OperatorTok{*}\NormalTok{Consumer}
+\NormalTok{    logger   }\OperatorTok{*}\NormalTok{zap}\OperatorTok{.}\NormalTok{Logger}
+\OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{w }\OperatorTok{*}\NormalTok{ConsumerWorker}\OperatorTok{)}\NormalTok{ Name}\OperatorTok{()} \DataTypeTok{string} \OperatorTok{\{} \ControlFlowTok{return} \StringTok{"kafka{-}consumer"} \OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{w }\OperatorTok{*}\NormalTok{ConsumerWorker}\OperatorTok{)}\NormalTok{ Run}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{)} \DataTypeTok{error} \OperatorTok{\{}
+\NormalTok{    w}\OperatorTok{.}\NormalTok{logger}\OperatorTok{.}\NormalTok{Info}\OperatorTok{(}\StringTok{"kafka consumer worker started"}\OperatorTok{)}
+    \ControlFlowTok{return}\NormalTok{ w}\OperatorTok{.}\NormalTok{consumer}\OperatorTok{.}\NormalTok{Run}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{)} \CommentTok{// from Chapter 11}
+\OperatorTok{\}}
+
+\CommentTok{// internal/websocket/hub\_worker.go}
+\KeywordTok{type}\NormalTok{ HubWorker }\KeywordTok{struct}\OperatorTok{\{}\NormalTok{ hub }\OperatorTok{*}\NormalTok{Hub }\OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{w }\OperatorTok{*}\NormalTok{HubWorker}\OperatorTok{)}\NormalTok{ Name}\OperatorTok{()} \DataTypeTok{string}                   \OperatorTok{\{} \ControlFlowTok{return} \StringTok{"websocket{-}hub"} \OperatorTok{\}}
+\KeywordTok{func} \OperatorTok{(}\NormalTok{w }\OperatorTok{*}\NormalTok{HubWorker}\OperatorTok{)}\NormalTok{ Run}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{)} \DataTypeTok{error}  \OperatorTok{\{}\NormalTok{ w}\OperatorTok{.}\NormalTok{hub}\OperatorTok{.}\NormalTok{Run}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{);} \ControlFlowTok{return} \OtherTok{nil} \OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+The \texttt{Worker} interface ensures all background services are
+managed uniformly --- health tracking, restart policy, and backoff are
+orchestrator concerns, not individual worker concerns.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{run-scoped-workers-the-load-test-runner}{%
+\subsection{5. Run-Scoped Workers --- The Load Test
+Runner}\label{run-scoped-workers-the-load-test-runner}}
+
+A load test run is a temporary worker: it exists for the duration of one
+run, then exits. The run manager creates and tracks these:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{// internal/loadgen/run\_manager.go}
+\KeywordTok{package}\NormalTok{ loadgen}
+
+\KeywordTok{import} \OperatorTok{(}
+    \StringTok{"context"}
+    \StringTok{"fmt"}
+    \StringTok{"sync"}
+    \StringTok{"time"}
+\OperatorTok{)}
+
+\KeywordTok{type}\NormalTok{ RunManager }\KeywordTok{struct} \OperatorTok{\{}
+\NormalTok{    activeRuns  }\KeywordTok{map}\OperatorTok{[}\DataTypeTok{string}\OperatorTok{]*}\NormalTok{activeRun}
+\NormalTok{    mu          sync}\OperatorTok{.}\NormalTok{RWMutex}
+\NormalTok{    store       store}\OperatorTok{.}\NormalTok{RunStore}
+\NormalTok{    orch        }\OperatorTok{*}\NormalTok{worker}\OperatorTok{.}\NormalTok{Orchestrator}
+\NormalTok{    logger      }\OperatorTok{*}\NormalTok{zap}\OperatorTok{.}\NormalTok{Logger}
+\OperatorTok{\}}
+
+\KeywordTok{type}\NormalTok{ activeRun }\KeywordTok{struct} \OperatorTok{\{}
+\NormalTok{    runID   }\DataTypeTok{string}
+\NormalTok{    cancel  context}\OperatorTok{.}\NormalTok{CancelFunc}
+\NormalTok{    started time}\OperatorTok{.}\NormalTok{Time}
+\NormalTok{    done    }\KeywordTok{chan} \KeywordTok{struct}\OperatorTok{\{\}}
+\OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{m }\OperatorTok{*}\NormalTok{RunManager}\OperatorTok{)}\NormalTok{ StartRun}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ cfg RunConfig}\OperatorTok{)} \OperatorTok{(}\DataTypeTok{string}\OperatorTok{,} \DataTypeTok{error}\OperatorTok{)} \OperatorTok{\{}
+\NormalTok{    runID }\OperatorTok{:=}\NormalTok{ newRunID}\OperatorTok{()}
+
+    \CommentTok{// Create a run{-}scoped context — cancelled by user abort or duration timeout}
+\NormalTok{    runCtx}\OperatorTok{,}\NormalTok{ cancel }\OperatorTok{:=}\NormalTok{ context}\OperatorTok{.}\NormalTok{WithTimeout}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{,}\NormalTok{ cfg}\OperatorTok{.}\NormalTok{Duration}\OperatorTok{+}\DecValTok{30}\OperatorTok{*}\NormalTok{time}\OperatorTok{.}\NormalTok{Second}\OperatorTok{)}
+
+\NormalTok{    run }\OperatorTok{:=} \OperatorTok{\&}\NormalTok{activeRun}\OperatorTok{\{}
+\NormalTok{        runID}\OperatorTok{:}\NormalTok{   runID}\OperatorTok{,}
+\NormalTok{        cancel}\OperatorTok{:}\NormalTok{  cancel}\OperatorTok{,}
+\NormalTok{        started}\OperatorTok{:}\NormalTok{ time}\OperatorTok{.}\NormalTok{Now}\OperatorTok{(),}
+\NormalTok{        done}\OperatorTok{:}    \BuiltInTok{make}\OperatorTok{(}\KeywordTok{chan} \KeywordTok{struct}\OperatorTok{\{\}),}
+    \OperatorTok{\}}
+
+\NormalTok{    m}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{Lock}\OperatorTok{()}
+\NormalTok{    m}\OperatorTok{.}\NormalTok{activeRuns}\OperatorTok{[}\NormalTok{runID}\OperatorTok{]} \OperatorTok{=}\NormalTok{ run}
+\NormalTok{    m}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{Unlock}\OperatorTok{()}
+
+    \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ m}\OperatorTok{.}\NormalTok{store}\OperatorTok{.}\NormalTok{Create}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{,}\NormalTok{ store}\OperatorTok{.}\NormalTok{Run}\OperatorTok{\{}\NormalTok{ID}\OperatorTok{:}\NormalTok{ runID}\OperatorTok{,}\NormalTok{ Config}\OperatorTok{:}\NormalTok{ cfg}\OperatorTok{,}\NormalTok{ Status}\OperatorTok{:}\NormalTok{ store}\OperatorTok{.}\NormalTok{StatusRunning}\OperatorTok{\});}\NormalTok{ err }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
+\NormalTok{        cancel}\OperatorTok{()}
+        \ControlFlowTok{return} \StringTok{""}\OperatorTok{,}\NormalTok{ fmt}\OperatorTok{.}\NormalTok{Errorf}\OperatorTok{(}\StringTok{"create run: \%w"}\OperatorTok{,}\NormalTok{ err}\OperatorTok{)}
+    \OperatorTok{\}}
+
+    \ControlFlowTok{go} \KeywordTok{func}\OperatorTok{()} \OperatorTok{\{}
+        \ControlFlowTok{defer} \KeywordTok{func}\OperatorTok{()} \OperatorTok{\{}
+\NormalTok{            cancel}\OperatorTok{()}
+\NormalTok{            m}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{Lock}\OperatorTok{()}
+            \BuiltInTok{delete}\OperatorTok{(}\NormalTok{m}\OperatorTok{.}\NormalTok{activeRuns}\OperatorTok{,}\NormalTok{ runID}\OperatorTok{)}
+\NormalTok{            m}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{Unlock}\OperatorTok{()}
+            \BuiltInTok{close}\OperatorTok{(}\NormalTok{run}\OperatorTok{.}\NormalTok{done}\OperatorTok{)}
+        \OperatorTok{\}()}
+
+\NormalTok{        runner }\OperatorTok{:=}\NormalTok{ NewRunner}\OperatorTok{(}\NormalTok{cfg}\OperatorTok{)}
+\NormalTok{        report}\OperatorTok{,}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ runner}\OperatorTok{.}\NormalTok{Run}\OperatorTok{(}\NormalTok{runCtx}\OperatorTok{)}
+
+\NormalTok{        status }\OperatorTok{:=}\NormalTok{ store}\OperatorTok{.}\NormalTok{StatusCompleted}
+        \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\&\&}\NormalTok{ runCtx}\OperatorTok{.}\NormalTok{Err}\OperatorTok{()} \OperatorTok{==} \OtherTok{nil} \OperatorTok{\{}
+            \CommentTok{// Genuine failure — not a timeout/cancellation}
+\NormalTok{            status }\OperatorTok{=}\NormalTok{ store}\OperatorTok{.}\NormalTok{StatusFailed}
+\NormalTok{            m}\OperatorTok{.}\NormalTok{logger}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\StringTok{"run failed"}\OperatorTok{,}\NormalTok{ zap}\OperatorTok{.}\NormalTok{String}\OperatorTok{(}\StringTok{"run\_id"}\OperatorTok{,}\NormalTok{ runID}\OperatorTok{),}\NormalTok{ zap}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\NormalTok{err}\OperatorTok{))}
+        \OperatorTok{\}}
+
+        \CommentTok{// Persist final report (use background context — runCtx is cancelled)}
+        \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ m}\OperatorTok{.}\NormalTok{store}\OperatorTok{.}\NormalTok{UpdateStatus}\OperatorTok{(}\NormalTok{context}\OperatorTok{.}\NormalTok{Background}\OperatorTok{(),}\NormalTok{ runID}\OperatorTok{,}\NormalTok{ status}\OperatorTok{);}\NormalTok{ err }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
+\NormalTok{            m}\OperatorTok{.}\NormalTok{logger}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\StringTok{"update run status"}\OperatorTok{,}\NormalTok{ zap}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\NormalTok{err}\OperatorTok{))}
+        \OperatorTok{\}}
+        \ControlFlowTok{if}\NormalTok{ report }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
+            \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ m}\OperatorTok{.}\NormalTok{store}\OperatorTok{.}\NormalTok{SaveReport}\OperatorTok{(}\NormalTok{context}\OperatorTok{.}\NormalTok{Background}\OperatorTok{(),}\NormalTok{ runID}\OperatorTok{,}\NormalTok{ report}\OperatorTok{);}\NormalTok{ err }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
+\NormalTok{                m}\OperatorTok{.}\NormalTok{logger}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\StringTok{"save run report"}\OperatorTok{,}\NormalTok{ zap}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\NormalTok{err}\OperatorTok{))}
+            \OperatorTok{\}}
+        \OperatorTok{\}}
+    \OperatorTok{\}()}
+
+    \ControlFlowTok{return}\NormalTok{ runID}\OperatorTok{,} \OtherTok{nil}
+\OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{m }\OperatorTok{*}\NormalTok{RunManager}\OperatorTok{)}\NormalTok{ StopRun}\OperatorTok{(}\NormalTok{runID }\DataTypeTok{string}\OperatorTok{)} \DataTypeTok{error} \OperatorTok{\{}
+\NormalTok{    m}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{RLock}\OperatorTok{()}
+\NormalTok{    run}\OperatorTok{,}\NormalTok{ ok }\OperatorTok{:=}\NormalTok{ m}\OperatorTok{.}\NormalTok{activeRuns}\OperatorTok{[}\NormalTok{runID}\OperatorTok{]}
+\NormalTok{    m}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{RUnlock}\OperatorTok{()}
+
+    \ControlFlowTok{if} \OperatorTok{!}\NormalTok{ok }\OperatorTok{\{}
+        \ControlFlowTok{return}\NormalTok{ store}\OperatorTok{.}\NormalTok{ErrNotFound}
+    \OperatorTok{\}}
+
+\NormalTok{    run}\OperatorTok{.}\NormalTok{cancel}\OperatorTok{()} \CommentTok{// cancel the run context → workers see ctx.Done()}
+    \OperatorTok{\textless{}{-}}\NormalTok{run}\OperatorTok{.}\NormalTok{done   }\CommentTok{// wait for goroutine to acknowledge and clean up}
+    \ControlFlowTok{return} \OtherTok{nil}
+\OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{m }\OperatorTok{*}\NormalTok{RunManager}\OperatorTok{)}\NormalTok{ ActiveRunIDs}\OperatorTok{()} \OperatorTok{[]}\DataTypeTok{string} \OperatorTok{\{}
+\NormalTok{    m}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{RLock}\OperatorTok{()}
+    \ControlFlowTok{defer}\NormalTok{ m}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{RUnlock}\OperatorTok{()}
+\NormalTok{    ids }\OperatorTok{:=} \BuiltInTok{make}\OperatorTok{([]}\DataTypeTok{string}\OperatorTok{,} \DecValTok{0}\OperatorTok{,} \BuiltInTok{len}\OperatorTok{(}\NormalTok{m}\OperatorTok{.}\NormalTok{activeRuns}\OperatorTok{))}
+    \ControlFlowTok{for}\NormalTok{ id }\OperatorTok{:=} \KeywordTok{range}\NormalTok{ m}\OperatorTok{.}\NormalTok{activeRuns }\OperatorTok{\{}
+\NormalTok{        ids }\OperatorTok{=} \BuiltInTok{append}\OperatorTok{(}\NormalTok{ids}\OperatorTok{,}\NormalTok{ id}\OperatorTok{)}
+    \OperatorTok{\}}
+    \ControlFlowTok{return}\NormalTok{ ids}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{worker-health-in-the-readiness-probe}{%
+\subsection{6. Worker Health in the Readiness
+Probe}\label{worker-health-in-the-readiness-probe}}
+
+The orchestrator's \texttt{HealthSummary()} powers the \texttt{/readyz}
+endpoint:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{func} \OperatorTok{(}\NormalTok{s }\OperatorTok{*}\NormalTok{Server}\OperatorTok{)}\NormalTok{ readinessHandler}\OperatorTok{(}\NormalTok{w http}\OperatorTok{.}\NormalTok{ResponseWriter}\OperatorTok{,}\NormalTok{ r }\OperatorTok{*}\NormalTok{http}\OperatorTok{.}\NormalTok{Request}\OperatorTok{)} \OperatorTok{\{}
+\NormalTok{    checks }\OperatorTok{:=} \KeywordTok{map}\OperatorTok{[}\DataTypeTok{string}\OperatorTok{]}\NormalTok{any}\OperatorTok{\{\}}
+\NormalTok{    allOK }\OperatorTok{:=} \OtherTok{true}
+
+    \CommentTok{// Infrastructure checks}
+    \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ s}\OperatorTok{.}\NormalTok{db}\OperatorTok{.}\NormalTok{PingContext}\OperatorTok{(}\NormalTok{r}\OperatorTok{.}\NormalTok{Context}\OperatorTok{());}\NormalTok{ err }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
+\NormalTok{        checks}\OperatorTok{[}\StringTok{"database"}\OperatorTok{]} \OperatorTok{=} \StringTok{"unhealthy"}
+\NormalTok{        allOK }\OperatorTok{=} \OtherTok{false}
+    \OperatorTok{\}} \ControlFlowTok{else} \OperatorTok{\{}
+\NormalTok{        checks}\OperatorTok{[}\StringTok{"database"}\OperatorTok{]} \OperatorTok{=} \StringTok{"ok"}
+    \OperatorTok{\}}
+
+    \CommentTok{// Background worker health}
+\NormalTok{    workerHealth }\OperatorTok{:=}\NormalTok{ s}\OperatorTok{.}\NormalTok{orchestrator}\OperatorTok{.}\NormalTok{HealthSummary}\OperatorTok{()}
+    \ControlFlowTok{for}\NormalTok{ name}\OperatorTok{,}\NormalTok{ healthy }\OperatorTok{:=} \KeywordTok{range}\NormalTok{ workerHealth }\OperatorTok{\{}
+\NormalTok{        checks}\OperatorTok{[}\StringTok{"worker:"}\OperatorTok{+}\NormalTok{name}\OperatorTok{]} \OperatorTok{=} \KeywordTok{map}\OperatorTok{[}\DataTypeTok{string}\OperatorTok{]}\DataTypeTok{bool}\OperatorTok{\{}\StringTok{"healthy"}\OperatorTok{:}\NormalTok{ healthy}\OperatorTok{\}}
+        \ControlFlowTok{if} \OperatorTok{!}\NormalTok{healthy }\OperatorTok{\{}
+\NormalTok{            allOK }\OperatorTok{=} \OtherTok{false}
+        \OperatorTok{\}}
+    \OperatorTok{\}}
+
+\NormalTok{    status }\OperatorTok{:=}\NormalTok{ http}\OperatorTok{.}\NormalTok{StatusOK}
+    \ControlFlowTok{if} \OperatorTok{!}\NormalTok{allOK }\OperatorTok{\{}
+\NormalTok{        status }\OperatorTok{=}\NormalTok{ http}\OperatorTok{.}\NormalTok{StatusServiceUnavailable}
+    \OperatorTok{\}}
+\NormalTok{    writeJSON}\OperatorTok{(}\NormalTok{w}\OperatorTok{,}\NormalTok{ status}\OperatorTok{,}\NormalTok{ checks}\OperatorTok{)}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+A crashed Kafka consumer triggers \texttt{/readyz} to return 503 ---
+Kubernetes stops routing traffic to this pod until the worker restarts
+and marks itself healthy.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{retry-with-exponential-backoff-and-jitter}{%
+\subsection{7. Retry with Exponential Backoff and
+Jitter}\label{retry-with-exponential-backoff-and-jitter}}
+
+Background workers retrying failed operations must use jitter to prevent
+the \textbf{thundering herd}: all workers retrying simultaneously after
+a Kafka broker restarts, overwhelming it again:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{// internal/retry/retry.go}
+\KeywordTok{package}\NormalTok{ retry}
+
+\KeywordTok{import} \OperatorTok{(}
+    \StringTok{"context"}
+    \StringTok{"math/rand"}
+    \StringTok{"time"}
+\OperatorTok{)}
+
+\KeywordTok{type}\NormalTok{ Config }\KeywordTok{struct} \OperatorTok{\{}
+\NormalTok{    InitialDelay time}\OperatorTok{.}\NormalTok{Duration}
+\NormalTok{    MaxDelay     time}\OperatorTok{.}\NormalTok{Duration}
+\NormalTok{    Multiplier   }\DataTypeTok{float64}
+\NormalTok{    Jitter       }\DataTypeTok{float64} \CommentTok{// fraction of delay to randomize (0.0–1.0)}
+\NormalTok{    MaxAttempts  }\DataTypeTok{int}     \CommentTok{// 0 = unlimited}
+\OperatorTok{\}}
+
+\KeywordTok{func}\NormalTok{ Do}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ cfg Config}\OperatorTok{,}\NormalTok{ fn }\KeywordTok{func}\OperatorTok{()} \DataTypeTok{error}\OperatorTok{)} \DataTypeTok{error} \OperatorTok{\{}
+\NormalTok{    delay }\OperatorTok{:=}\NormalTok{ cfg}\OperatorTok{.}\NormalTok{InitialDelay}
+    \ControlFlowTok{for}\NormalTok{ attempt }\OperatorTok{:=} \DecValTok{0}\OperatorTok{;} \OperatorTok{;}\NormalTok{ attempt}\OperatorTok{++} \OperatorTok{\{}
+\NormalTok{        err }\OperatorTok{:=}\NormalTok{ fn}\OperatorTok{()}
+        \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{==} \OtherTok{nil} \OperatorTok{\{}
+            \ControlFlowTok{return} \OtherTok{nil}
+        \OperatorTok{\}}
+        \ControlFlowTok{if}\NormalTok{ ctx}\OperatorTok{.}\NormalTok{Err}\OperatorTok{()} \OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
+            \ControlFlowTok{return}\NormalTok{ ctx}\OperatorTok{.}\NormalTok{Err}\OperatorTok{()}
+        \OperatorTok{\}}
+        \ControlFlowTok{if}\NormalTok{ cfg}\OperatorTok{.}\NormalTok{MaxAttempts }\OperatorTok{\textgreater{}} \DecValTok{0} \OperatorTok{\&\&}\NormalTok{ attempt }\OperatorTok{\textgreater{}=}\NormalTok{ cfg}\OperatorTok{.}\NormalTok{MaxAttempts}\DecValTok{{-}1} \OperatorTok{\{}
+            \ControlFlowTok{return}\NormalTok{ fmt}\OperatorTok{.}\NormalTok{Errorf}\OperatorTok{(}\StringTok{"max attempts (\%d) exceeded: \%w"}\OperatorTok{,}\NormalTok{ cfg}\OperatorTok{.}\NormalTok{MaxAttempts}\OperatorTok{,}\NormalTok{ err}\OperatorTok{)}
+        \OperatorTok{\}}
+
+        \CommentTok{// Jitter: actual delay ∈ [delay*(1{-}jitter), delay*(1+jitter)]}
+\NormalTok{        jitterRange }\OperatorTok{:=} \DataTypeTok{float64}\OperatorTok{(}\NormalTok{delay}\OperatorTok{)} \OperatorTok{*}\NormalTok{ cfg}\OperatorTok{.}\NormalTok{Jitter}
+\NormalTok{        actualDelay }\OperatorTok{:=}\NormalTok{ delay }\OperatorTok{+}\NormalTok{ time}\OperatorTok{.}\NormalTok{Duration}\OperatorTok{((}\NormalTok{rand}\OperatorTok{.}\NormalTok{Float64}\OperatorTok{()*}\DecValTok{2{-}1}\OperatorTok{)*}\NormalTok{jitterRange}\OperatorTok{)}
+
+        \ControlFlowTok{select} \OperatorTok{\{}
+        \ControlFlowTok{case} \OperatorTok{\textless{}{-}}\NormalTok{ctx}\OperatorTok{.}\NormalTok{Done}\OperatorTok{():}
+            \ControlFlowTok{return}\NormalTok{ ctx}\OperatorTok{.}\NormalTok{Err}\OperatorTok{()}
+        \ControlFlowTok{case} \OperatorTok{\textless{}{-}}\NormalTok{time}\OperatorTok{.}\NormalTok{After}\OperatorTok{(}\NormalTok{actualDelay}\OperatorTok{):}
+        \OperatorTok{\}}
+
+\NormalTok{        delay }\OperatorTok{=}\NormalTok{ time}\OperatorTok{.}\NormalTok{Duration}\OperatorTok{(}\DataTypeTok{float64}\OperatorTok{(}\NormalTok{delay}\OperatorTok{)} \OperatorTok{*}\NormalTok{ cfg}\OperatorTok{.}\NormalTok{Multiplier}\OperatorTok{)}
+        \ControlFlowTok{if}\NormalTok{ delay }\OperatorTok{\textgreater{}}\NormalTok{ cfg}\OperatorTok{.}\NormalTok{MaxDelay }\OperatorTok{\{}
+\NormalTok{            delay }\OperatorTok{=}\NormalTok{ cfg}\OperatorTok{.}\NormalTok{MaxDelay}
+        \OperatorTok{\}}
+    \OperatorTok{\}}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+Usage in the Kafka consumer worker:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{func} \OperatorTok{(}\NormalTok{w }\OperatorTok{*}\NormalTok{ConsumerWorker}\OperatorTok{)}\NormalTok{ Run}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{)} \DataTypeTok{error} \OperatorTok{\{}
+    \ControlFlowTok{return}\NormalTok{ retry}\OperatorTok{.}\NormalTok{Do}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{,}\NormalTok{ retry}\OperatorTok{.}\NormalTok{Config}\OperatorTok{\{}
+\NormalTok{        InitialDelay}\OperatorTok{:}\NormalTok{ time}\OperatorTok{.}\NormalTok{Second}\OperatorTok{,}
+\NormalTok{        MaxDelay}\OperatorTok{:}     \DecValTok{30} \OperatorTok{*}\NormalTok{ time}\OperatorTok{.}\NormalTok{Second}\OperatorTok{,}
+\NormalTok{        Multiplier}\OperatorTok{:}   \DecValTok{2}\FloatTok{.0}\OperatorTok{,}
+\NormalTok{        Jitter}\OperatorTok{:}       \DecValTok{0}\FloatTok{.3}\OperatorTok{,} \CommentTok{// ±30\% randomization}
+\NormalTok{        MaxAttempts}\OperatorTok{:}  \DecValTok{0}\OperatorTok{,}   \CommentTok{// unlimited — orchestrator controls restarts}
+    \OperatorTok{\},} \KeywordTok{func}\OperatorTok{()} \DataTypeTok{error} \OperatorTok{\{}
+        \ControlFlowTok{return}\NormalTok{ w}\OperatorTok{.}\NormalTok{consumer}\OperatorTok{.}\NormalTok{connectAndConsume}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{)}
+    \OperatorTok{\})}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{rate-limited-background-workers}{%
+\subsection{8. Rate-Limited Background
+Workers}\label{rate-limited-background-workers}}
+
+Some background operations must be rate-limited even in the background
+path to protect downstream services. The report generator shouldn't
+compute 50 reports simultaneously after a batch of runs complete:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{// internal/worker/report\_generator.go}
+\KeywordTok{type}\NormalTok{ ReportGeneratorWorker }\KeywordTok{struct} \OperatorTok{\{}
+\NormalTok{    runEvents }\OperatorTok{\textless{}{-}}\KeywordTok{chan} \DataTypeTok{string}       \CommentTok{// run IDs of completed runs}
+\NormalTok{    store     store}\OperatorTok{.}\NormalTok{MetricStore}
+\NormalTok{    limiter   }\OperatorTok{*}\NormalTok{rate}\OperatorTok{.}\NormalTok{Limiter      }\CommentTok{// 5 reports/second max}
+\NormalTok{    logger    }\OperatorTok{*}\NormalTok{zap}\OperatorTok{.}\NormalTok{Logger}
+\OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{w }\OperatorTok{*}\NormalTok{ReportGeneratorWorker}\OperatorTok{)}\NormalTok{ Name}\OperatorTok{()} \DataTypeTok{string} \OperatorTok{\{} \ControlFlowTok{return} \StringTok{"report{-}generator"} \OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{w }\OperatorTok{*}\NormalTok{ReportGeneratorWorker}\OperatorTok{)}\NormalTok{ Run}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{)} \DataTypeTok{error} \OperatorTok{\{}
+    \ControlFlowTok{for} \OperatorTok{\{}
+        \ControlFlowTok{select} \OperatorTok{\{}
+        \ControlFlowTok{case} \OperatorTok{\textless{}{-}}\NormalTok{ctx}\OperatorTok{.}\NormalTok{Done}\OperatorTok{():}
+            \ControlFlowTok{return} \OtherTok{nil}
+        \ControlFlowTok{case}\NormalTok{ runID}\OperatorTok{,}\NormalTok{ ok }\OperatorTok{:=} \OperatorTok{\textless{}{-}}\NormalTok{w}\OperatorTok{.}\NormalTok{runEvents}\OperatorTok{:}
+            \ControlFlowTok{if} \OperatorTok{!}\NormalTok{ok }\OperatorTok{\{}
+                \ControlFlowTok{return} \OtherTok{nil}
+            \OperatorTok{\}}
+            \CommentTok{// Rate limit: don\textquotesingle{}t overwhelm DB with concurrent report computations}
+            \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ w}\OperatorTok{.}\NormalTok{limiter}\OperatorTok{.}\NormalTok{Wait}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{);}\NormalTok{ err }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
+                \ControlFlowTok{return} \OtherTok{nil} \CommentTok{// context cancelled}
+            \OperatorTok{\}}
+            \ControlFlowTok{go}\NormalTok{ w}\OperatorTok{.}\NormalTok{generateReport}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{,}\NormalTok{ runID}\OperatorTok{)} \CommentTok{// async so we don\textquotesingle{}t block the channel}
+        \OperatorTok{\}}
+    \OperatorTok{\}}
+\OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{w }\OperatorTok{*}\NormalTok{ReportGeneratorWorker}\OperatorTok{)}\NormalTok{ generateReport}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ runID }\DataTypeTok{string}\OperatorTok{)} \OperatorTok{\{}
+    \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ retry}\OperatorTok{.}\NormalTok{Do}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{,}\NormalTok{ defaultRetryConfig}\OperatorTok{,} \KeywordTok{func}\OperatorTok{()} \DataTypeTok{error} \OperatorTok{\{}
+        \ControlFlowTok{return}\NormalTok{ w}\OperatorTok{.}\NormalTok{store}\OperatorTok{.}\NormalTok{ComputeAndSaveReport}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{,}\NormalTok{ runID}\OperatorTok{)}
+    \OperatorTok{\});}\NormalTok{ err }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
+\NormalTok{        w}\OperatorTok{.}\NormalTok{logger}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\StringTok{"report generation failed"}\OperatorTok{,}\NormalTok{ zap}\OperatorTok{.}\NormalTok{String}\OperatorTok{(}\StringTok{"run\_id"}\OperatorTok{,}\NormalTok{ runID}\OperatorTok{),}\NormalTok{ zap}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\NormalTok{err}\OperatorTok{))}
+    \OperatorTok{\}}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{key-takeaways}{%
+\subsection{Key Takeaways}\label{key-takeaways}}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{\texttt{Worker} interface + \texttt{Orchestrator}} ---
+  separates the what (business logic) from the how (lifecycle, restart,
+  health).
+\item
+  \textbf{Restart policy is a per-worker decision}: Kafka consumer =
+  restart-on-failure; WebSocket hub = restart-always.
+\item
+  \textbf{Exponential backoff + jitter} prevents thundering herd after
+  shared dependency recovery.
+\item
+  \textbf{Run-scoped workers} have a \texttt{cancel()} function --- user
+  abort and duration timeout both route through it.
+\item
+  \textbf{Worker health in \texttt{/readyz}} --- a crashed critical
+  worker marks the pod not-ready, stopping traffic routing.
+\item
+  \textbf{Rate-limited background workers} protect downstream services
+  from bursty background load.
+\end{enumerate}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{production-checklist}{%
+\subsection{Production Checklist}\label{production-checklist}}
+
+\begin{itemize}
+\tightlist
+\item[$\square$]
+  All background goroutines managed via \texttt{Orchestrator.Register}
+\item[$\square$]
+  Restart policy documented for each worker
+\item[$\square$]
+  Exponential backoff with jitter on all retry loops
+\item[$\square$]
+  Worker health exposed in \texttt{/readyz}
+\item[$\square$]
+  Run manager \texttt{StopRun} waits for goroutine acknowledgment before
+  returning
+\item[$\square$]
+  Report generator rate-limited to protect DB under burst
+\item[$\square$]
+  \texttt{context.Background()} used for post-cancellation cleanup
+  (store updates after run ends)
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\emph{Next chapter: Real-Time Systems Design in Go --- architecture for
+latency-sensitive, continuously-updating distributed backend systems.}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{chapter-18-real-time-systems-design-in-go}{%
+\section{Chapter 18 --- Real-Time Systems Design in
+Go}\label{chapter-18-real-time-systems-design-in-go}}
+
+\begin{quote}
+\textbf{Engineering Learning Booklet \textbar{} ARCHER Backend
+Architecture Series} \emph{Architecture and implementation patterns for
+latency-sensitive, continuously-updating backend systems --- the
+engineering principles behind ARCHER's live dashboard.}
+\end{quote}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{what-real-time-actually-means-in-backend-systems}{%
+\subsection{1. What ``Real-Time'' Actually Means in Backend
+Systems}\label{what-real-time-actually-means-in-backend-systems}}
+
+``Real-time'' in backend engineering means \textbf{latency-bounded data
+delivery}, not instantaneous. A dashboard updating every 100ms is
+real-time for a user. A Kafka consumer processing within 500ms is
+real-time for an event pipeline. The engineering question is:
+\textbf{what is the acceptable end-to-end latency budget, and which
+architectural decisions keep you within it?}
+
+For ARCHER's live dashboard:
+
+\begin{verbatim}
+Event occurrence (worker result)
+    ↓  < 5ms     Worker result → MetricAccumulator (in-process channel)
+    ↓  < 10ms    MetricAccumulator → Snapshot (periodic, 1s ticker)
+    ↓  < 100ms   Snapshot → Kafka (batched, network)
+    ↓  < 500ms   Kafka → Consumer (fetch latency)
+    ↓  < 50ms    Consumer → DB (batch write)
+    ─────────────────────────────────────────────
+    Total (DB path): < 665ms
+
+    ↓  < 10ms    Snapshot → WebSocket broadcast (in-process channel)
+    ↓  < 50ms    WebSocket → Browser (TCP + JS render)
+    ─────────────────────────────────────────────
+    Total (WS path): < 70ms
+\end{verbatim}
+
+The WebSocket path is the real-time path. The Kafka-to-DB path is the
+durable path. They are independent --- a slow DB write does not delay
+dashboard updates.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{the-event-sourcing-mental-model}{%
+\subsection{2. The Event Sourcing Mental
+Model}\label{the-event-sourcing-mental-model}}
+
+ARCHER's telemetry system is an event-sourced system:
+
+\begin{verbatim}
+Events (immutable): MetricEvent{runID, workerID, latency, statusCode, timestamp}
+State (derived):    RunSnapshot{p95, rps, errorRate, ...}
+\end{verbatim}
+
+The canonical event log is Kafka. The derived state (snapshots,
+percentiles, reports) is computed from the log. If the DB is corrupted,
+you replay from Kafka and recompute all state. This is the core value
+proposition of event sourcing in a telemetry system.
+
+This mental model has architectural implications: - \textbf{Writes are
+append-only} --- never update a metric event; add a new one -
+\textbf{State is computed, not stored directly} --- the DB stores
+pre-computed snapshots for query efficiency - \textbf{Replay is
+possible} --- Kafka retention window (7 days) defines the replay horizon
+- \textbf{Consumer groups are stateless} --- they can be scaled out
+without coordination
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{latency-optimization-the-real-time-pipeline}{%
+\subsection{3. Latency Optimization --- The Real-Time
+Pipeline}\label{latency-optimization-the-real-time-pipeline}}
+
+\hypertarget{eliminate-synchronous-db-writes-from-the-critical-path}{%
+\subsubsection{3.1 Eliminate Synchronous DB Writes from the Critical
+Path}\label{eliminate-synchronous-db-writes-from-the-critical-path}}
+
+The most common real-time performance mistake: writing to the DB on
+every event.
+
+\begin{verbatim}
+BAD: Worker result → DB write (10-100ms per write) → WebSocket broadcast
+GOOD: Worker result → Channel → Accumulator → WebSocket broadcast
+                                             → Batch → DB (async)
+\end{verbatim}
+
+The WebSocket broadcast path must never touch the DB. It reads from the
+in-memory accumulator only.
+
+\hypertarget{fixed-interval-tickers-vs-event-triggered-updates}{%
+\subsubsection{3.2 Fixed-Interval Tickers vs Event-Triggered
+Updates}\label{fixed-interval-tickers-vs-event-triggered-updates}}
+
+Two update strategies for the dashboard:
+
+\textbf{Fixed-interval (ARCHER's choice):}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{ticker }\OperatorTok{:=}\NormalTok{ time}\OperatorTok{.}\NormalTok{NewTicker}\OperatorTok{(}\NormalTok{time}\OperatorTok{.}\NormalTok{Second}\OperatorTok{)}
+\ControlFlowTok{for} \KeywordTok{range}\NormalTok{ ticker}\OperatorTok{.}\NormalTok{C }\OperatorTok{\{}
+\NormalTok{    snapshot }\OperatorTok{:=}\NormalTok{ accumulator}\OperatorTok{.}\NormalTok{Snapshot}\OperatorTok{()}
+\NormalTok{    hub}\OperatorTok{.}\NormalTok{Broadcast}\OperatorTok{(}\NormalTok{runID}\OperatorTok{,}\NormalTok{ encodeSnapshot}\OperatorTok{(}\NormalTok{snapshot}\OperatorTok{))}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{itemize}
+\tightlist
+\item
+  Predictable client update rate --- dashboard updates at known
+  intervals
+\item
+  Amortizes encoding overhead --- 1 JSON encode per second regardless of
+  event rate
+\item
+  Simple to reason about --- no event accumulation logic
+\end{itemize}
+
+\textbf{Event-triggered with debounce:}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{// Broadcast at most once per 200ms regardless of event rate}
+\KeywordTok{func}\NormalTok{ debounce}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ fn }\KeywordTok{func}\OperatorTok{(),}\NormalTok{ interval time}\OperatorTok{.}\NormalTok{Duration}\OperatorTok{)} \KeywordTok{func}\OperatorTok{()} \OperatorTok{\{}
+    \KeywordTok{var}\NormalTok{ mu sync}\OperatorTok{.}\NormalTok{Mutex}
+    \KeywordTok{var}\NormalTok{ timer }\OperatorTok{*}\NormalTok{time}\OperatorTok{.}\NormalTok{Timer}
+    \ControlFlowTok{return} \KeywordTok{func}\OperatorTok{()} \OperatorTok{\{}
+\NormalTok{        mu}\OperatorTok{.}\NormalTok{Lock}\OperatorTok{()}
+        \ControlFlowTok{defer}\NormalTok{ mu}\OperatorTok{.}\NormalTok{Unlock}\OperatorTok{()}
+        \ControlFlowTok{if}\NormalTok{ timer }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
+\NormalTok{            timer}\OperatorTok{.}\NormalTok{Reset}\OperatorTok{(}\NormalTok{interval}\OperatorTok{)}
+            \ControlFlowTok{return}
+        \OperatorTok{\}}
+\NormalTok{        timer }\OperatorTok{=}\NormalTok{ time}\OperatorTok{.}\NormalTok{AfterFunc}\OperatorTok{(}\NormalTok{interval}\OperatorTok{,} \KeywordTok{func}\OperatorTok{()} \OperatorTok{\{}
+\NormalTok{            mu}\OperatorTok{.}\NormalTok{Lock}\OperatorTok{()}
+\NormalTok{            timer }\OperatorTok{=} \OtherTok{nil}
+\NormalTok{            mu}\OperatorTok{.}\NormalTok{Unlock}\OperatorTok{()}
+\NormalTok{            fn}\OperatorTok{()}
+        \OperatorTok{\})}
+    \OperatorTok{\}}
+\OperatorTok{\}}
+
+\NormalTok{broadcast }\OperatorTok{:=}\NormalTok{ debounce}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{,} \KeywordTok{func}\OperatorTok{()} \OperatorTok{\{}
+\NormalTok{    hub}\OperatorTok{.}\NormalTok{Broadcast}\OperatorTok{(}\NormalTok{runID}\OperatorTok{,}\NormalTok{ encodeSnapshot}\OperatorTok{(}\NormalTok{accumulator}\OperatorTok{.}\NormalTok{Snapshot}\OperatorTok{()))}
+\OperatorTok{\},} \DecValTok{200}\OperatorTok{*}\NormalTok{time}\OperatorTok{.}\NormalTok{Millisecond}\OperatorTok{)}
+
+\CommentTok{// Called by the accumulator on every event}
+\NormalTok{collector}\OperatorTok{.}\NormalTok{OnEvent }\OperatorTok{=} \KeywordTok{func}\OperatorTok{(}\NormalTok{r Result}\OperatorTok{)} \OperatorTok{\{}
+\NormalTok{    accumulator}\OperatorTok{.}\NormalTok{Record}\OperatorTok{(}\NormalTok{r}\OperatorTok{)}
+\NormalTok{    broadcast}\OperatorTok{()} \CommentTok{// debounced — fires at most 5×/second}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+For ARCHER, the fixed 1-second ticker is correct. The load generator
+produces thousands of events per second --- debouncing each is
+unnecessary complexity. The ticker amortizes the cost correctly.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{the-real-time-dashboard-data-contract}{%
+\subsection{4. The Real-Time Dashboard Data
+Contract}\label{the-real-time-dashboard-data-contract}}
+
+The browser dashboard needs specific data layout for efficient
+rendering. Design the wire format for the dashboard's requirements, not
+for the DB schema:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{// DashboardSnapshot — optimized for real{-}time chart rendering}
+\KeywordTok{type}\NormalTok{ DashboardSnapshot }\KeywordTok{struct} \OperatorTok{\{}
+\NormalTok{    RunID     }\DataTypeTok{string}    \StringTok{\textasciigrave{}json:"run\_id"\textasciigrave{}}
+\NormalTok{    Timestamp time}\OperatorTok{.}\NormalTok{Time }\StringTok{\textasciigrave{}json:"ts"\textasciigrave{}}
+
+    \CommentTok{// Time{-}series point (for line chart)}
+\NormalTok{    Current }\KeywordTok{struct} \OperatorTok{\{}
+\NormalTok{        RPS       }\DataTypeTok{float64}       \StringTok{\textasciigrave{}json:"rps"\textasciigrave{}}
+\NormalTok{        P50Ms     }\DataTypeTok{float64}       \StringTok{\textasciigrave{}json:"p50\_ms"\textasciigrave{}}
+\NormalTok{        P95Ms     }\DataTypeTok{float64}       \StringTok{\textasciigrave{}json:"p95\_ms"\textasciigrave{}}
+\NormalTok{        P99Ms     }\DataTypeTok{float64}       \StringTok{\textasciigrave{}json:"p99\_ms"\textasciigrave{}}
+\NormalTok{        ErrorRate }\DataTypeTok{float64}       \StringTok{\textasciigrave{}json:"error\_rate"\textasciigrave{}}
+    \OperatorTok{\}} \StringTok{\textasciigrave{}json:"current"\textasciigrave{}}
+
+    \CommentTok{// Cumulative (for summary cards)}
+\NormalTok{    Cumulative }\KeywordTok{struct} \OperatorTok{\{}
+\NormalTok{        TotalRequests }\DataTypeTok{int64}         \StringTok{\textasciigrave{}json:"total\_requests"\textasciigrave{}}
+\NormalTok{        TotalErrors   }\DataTypeTok{int64}         \StringTok{\textasciigrave{}json:"total\_errors"\textasciigrave{}}
+\NormalTok{        Duration      time}\OperatorTok{.}\NormalTok{Duration }\StringTok{\textasciigrave{}json:"duration\_ms"\textasciigrave{}}
+    \OperatorTok{\}} \StringTok{\textasciigrave{}json:"cumulative"\textasciigrave{}}
+
+    \CommentTok{// Workers (for worker health panel)}
+\NormalTok{    Workers }\KeywordTok{struct} \OperatorTok{\{}
+\NormalTok{        Active  }\DataTypeTok{int}            \StringTok{\textasciigrave{}json:"active"\textasciigrave{}}
+\NormalTok{        ByID    }\KeywordTok{map}\OperatorTok{[}\DataTypeTok{string}\OperatorTok{]}\DataTypeTok{int} \StringTok{\textasciigrave{}json:"by\_id"\textasciigrave{}} \CommentTok{// workerID → request count this window}
+    \OperatorTok{\}} \StringTok{\textasciigrave{}json:"workers"\textasciigrave{}}
+
+    \CommentTok{// Status distribution (for pie chart)}
+\NormalTok{    StatusCodes }\KeywordTok{map}\OperatorTok{[}\DataTypeTok{string}\OperatorTok{]}\DataTypeTok{int64} \StringTok{\textasciigrave{}json:"status\_codes"\textasciigrave{}} \CommentTok{// "2xx", "4xx", "5xx"}
+
+    \CommentTok{// Run state}
+\NormalTok{    State RunState }\StringTok{\textasciigrave{}json:"state"\textasciigrave{}} \CommentTok{// running, completed, failed, stopping}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+The browser reads \texttt{current.p95\_ms} directly for the chart --- no
+client-side computation. The JSON is typed for direct mapping to chart
+library data structures.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{backpressure-in-real-time-systems}{%
+\subsection{5. Backpressure in Real-Time
+Systems}\label{backpressure-in-real-time-systems}}
+
+Real-time systems face a unique backpressure challenge: dropping data is
+sometimes correct.
+
+\begin{verbatim}
+Dashboard client connected on a slow mobile connection:
+  Server sends 1 snapshot/second (1-5 KB JSON each)
+  Client processes 0.5 snapshot/second (buffer fills after 10s)
+
+Options:
+1. Block broadcast — hub goroutine stalls waiting for slow client → all other clients lag
+2. Drop for slow client — disconnect slow client; others unaffected
+3. Aggregate — merge missed snapshots → send one summary (complex)
+\end{verbatim}
+
+ARCHER uses option 2 (from Chapter 10): the hub's broadcast arm uses a
+non-blocking send. If a client's send buffer is full, it's disconnected.
+The client reconnects and receives fresh data immediately. This is the
+correct tradeoff --- one slow browser tab must not degrade the dashboard
+for all other clients.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{// In hub.Run() broadcast arm:}
+\ControlFlowTok{case}\NormalTok{ msg }\OperatorTok{:=} \OperatorTok{\textless{}{-}}\NormalTok{h}\OperatorTok{.}\NormalTok{broadcast}\OperatorTok{:}
+    \ControlFlowTok{for}\NormalTok{ client }\OperatorTok{:=} \KeywordTok{range}\NormalTok{ runClients }\OperatorTok{\{}
+        \ControlFlowTok{select} \OperatorTok{\{}
+        \ControlFlowTok{case}\NormalTok{ client}\OperatorTok{.}\NormalTok{send }\OperatorTok{\textless{}{-}}\NormalTok{ msg}\OperatorTok{.}\NormalTok{Payload}\OperatorTok{:}
+        \ControlFlowTok{default}\OperatorTok{:}
+            \CommentTok{// Slow client — drop and disconnect}
+            \BuiltInTok{delete}\OperatorTok{(}\NormalTok{runClients}\OperatorTok{,}\NormalTok{ client}\OperatorTok{)}
+            \BuiltInTok{close}\OperatorTok{(}\NormalTok{client}\OperatorTok{.}\NormalTok{send}\OperatorTok{)} \CommentTok{// causes writePump to exit and close connection}
+        \OperatorTok{\}}
+    \OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{reconnection-and-state-recovery}{%
+\subsection{6. Reconnection and State
+Recovery}\label{reconnection-and-state-recovery}}
+
+WebSocket connections break. Network partitions, pod restarts, and
+browser sleep all disconnect clients. The dashboard must recover
+gracefully:
+
+\hypertarget{server-side-send-current-state-on-connect}{%
+\subsubsection{6.1 Server-Side: Send Current State on
+Connect}\label{server-side-send-current-state-on-connect}}
+
+When a new client connects, immediately send the current snapshot ---
+don't make them wait for the next tick:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{func} \OperatorTok{(}\NormalTok{h }\OperatorTok{*}\NormalTok{Hub}\OperatorTok{)}\NormalTok{ ServeClientForRun}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ conn }\OperatorTok{*}\NormalTok{websocket}\OperatorTok{.}\NormalTok{Conn}\OperatorTok{,}\NormalTok{ runID }\DataTypeTok{string}\OperatorTok{)} \OperatorTok{\{}
+\NormalTok{    client }\OperatorTok{:=}\NormalTok{ h}\OperatorTok{.}\NormalTok{registerClient}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{,}\NormalTok{ conn}\OperatorTok{,}\NormalTok{ runID}\OperatorTok{)}
+
+    \CommentTok{// Send current state immediately on connect}
+    \ControlFlowTok{if}\NormalTok{ snap }\OperatorTok{:=}\NormalTok{ h}\OperatorTok{.}\NormalTok{accumulator}\OperatorTok{.}\NormalTok{Snapshot}\OperatorTok{(}\NormalTok{runID}\OperatorTok{);}\NormalTok{ snap }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
+\NormalTok{        payload}\OperatorTok{,}\NormalTok{ \_ }\OperatorTok{:=}\NormalTok{ json}\OperatorTok{.}\NormalTok{Marshal}\OperatorTok{(}\NormalTok{snap}\OperatorTok{)}
+        \ControlFlowTok{select} \OperatorTok{\{}
+        \ControlFlowTok{case}\NormalTok{ client}\OperatorTok{.}\NormalTok{send }\OperatorTok{\textless{}{-}}\NormalTok{ payload}\OperatorTok{:}
+        \ControlFlowTok{default}\OperatorTok{:}
+        \OperatorTok{\}}
+    \OperatorTok{\}}
+
+    \CommentTok{// Start pumps}
+    \ControlFlowTok{go}\NormalTok{ client}\OperatorTok{.}\NormalTok{writePump}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{)}
+\NormalTok{    client}\OperatorTok{.}\NormalTok{readPump}\OperatorTok{(}\NormalTok{h}\OperatorTok{)}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+Without this, a reconnecting client sees a blank dashboard for up to 1
+second.
+
+\hypertarget{client-side-exponential-backoff-reconnect}{%
+\subsubsection{6.2 Client-Side: Exponential Backoff
+Reconnect}\label{client-side-exponential-backoff-reconnect}}
+
+The browser WebSocket client must reconnect with backoff (conceptual ---
+implemented in JavaScript, but your Go server must handle rapid
+reconnects):
+
+\begin{verbatim}
+connect → connected
+  ↓ disconnect
+  wait 1s → reconnect → connected
+  ↓ disconnect
+  wait 2s → reconnect → connected
+  ↓ disconnect
+  wait 4s → ... → max 30s
+\end{verbatim}
+
+Your Go server must handle reconnection correctly: - Accept the new
+WebSocket connection without state from the previous connection -
+Re-register the client with the hub under the same \texttt{runID} - Send
+the current snapshot immediately - Old client connection is already
+cleaned up via the read pump's \texttt{unregister} path
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{real-time-metrics-p99-in-a-sliding-window}{%
+\subsection{7. Real-Time Metrics --- P99 in a Sliding
+Window}\label{real-time-metrics-p99-in-a-sliding-window}}
+
+For real-time display, the cumulative P99 since run start is misleading
+after the first few seconds --- it reflects the entire run history, not
+recent behavior. Use the 30-second sliding window from Chapter 13:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{// Live dashboard shows sliding window percentiles — more actionable than cumulative}
+\KeywordTok{func} \OperatorTok{(}\NormalTok{c }\OperatorTok{*}\NormalTok{EventCollector}\OperatorTok{)}\NormalTok{ buildDashboardSnapshot}\OperatorTok{(}\NormalTok{runID }\DataTypeTok{string}\OperatorTok{)}\NormalTok{ DashboardSnapshot }\OperatorTok{\{}
+\NormalTok{    windowSnap }\OperatorTok{:=}\NormalTok{ c}\OperatorTok{.}\NormalTok{window}\OperatorTok{.}\NormalTok{Snapshot}\OperatorTok{()}   \CommentTok{// 30s sliding window percentiles}
+\NormalTok{    cumSnap    }\OperatorTok{:=}\NormalTok{ c}\OperatorTok{.}\NormalTok{buildSnapshot}\OperatorTok{()}     \CommentTok{// cumulative since run start}
+
+    \ControlFlowTok{return}\NormalTok{ DashboardSnapshot}\OperatorTok{\{}
+\NormalTok{        RunID}\OperatorTok{:}\NormalTok{     runID}\OperatorTok{,}
+\NormalTok{        Timestamp}\OperatorTok{:}\NormalTok{ time}\OperatorTok{.}\NormalTok{Now}\OperatorTok{(),}
+\NormalTok{        Current}\OperatorTok{:} \KeywordTok{struct}\OperatorTok{\{}\NormalTok{ RPS}\OperatorTok{,}\NormalTok{ P50Ms}\OperatorTok{,}\NormalTok{ P95Ms}\OperatorTok{,}\NormalTok{ P99Ms}\OperatorTok{,}\NormalTok{ ErrorRate }\DataTypeTok{float64} \OperatorTok{\}\{}
+\NormalTok{            RPS}\OperatorTok{:}\NormalTok{       windowSnap}\OperatorTok{.}\NormalTok{RequestsPerSec}\OperatorTok{,}
+\NormalTok{            P50Ms}\OperatorTok{:}     \DataTypeTok{float64}\OperatorTok{(}\NormalTok{windowSnap}\OperatorTok{.}\NormalTok{P50}\OperatorTok{)} \OperatorTok{/} \DataTypeTok{float64}\OperatorTok{(}\NormalTok{time}\OperatorTok{.}\NormalTok{Millisecond}\OperatorTok{),}
+\NormalTok{            P95Ms}\OperatorTok{:}     \DataTypeTok{float64}\OperatorTok{(}\NormalTok{windowSnap}\OperatorTok{.}\NormalTok{P95}\OperatorTok{)} \OperatorTok{/} \DataTypeTok{float64}\OperatorTok{(}\NormalTok{time}\OperatorTok{.}\NormalTok{Millisecond}\OperatorTok{),}
+\NormalTok{            P99Ms}\OperatorTok{:}     \DataTypeTok{float64}\OperatorTok{(}\NormalTok{windowSnap}\OperatorTok{.}\NormalTok{P99}\OperatorTok{)} \OperatorTok{/} \DataTypeTok{float64}\OperatorTok{(}\NormalTok{time}\OperatorTok{.}\NormalTok{Millisecond}\OperatorTok{),}
+\NormalTok{            ErrorRate}\OperatorTok{:} \DataTypeTok{float64}\OperatorTok{(}\NormalTok{windowSnap}\OperatorTok{.}\NormalTok{Errors}\OperatorTok{)} \OperatorTok{/} \DataTypeTok{float64}\OperatorTok{(}\NormalTok{max}\OperatorTok{(}\NormalTok{windowSnap}\OperatorTok{.}\NormalTok{Total}\OperatorTok{,} \DecValTok{1}\OperatorTok{)),}
+        \OperatorTok{\},}
+\NormalTok{        Cumulative}\OperatorTok{:} \KeywordTok{struct}\OperatorTok{\{}\NormalTok{ TotalRequests}\OperatorTok{,}\NormalTok{ TotalErrors }\DataTypeTok{int64}\OperatorTok{;}\NormalTok{ Duration time}\OperatorTok{.}\NormalTok{Duration }\OperatorTok{\}\{}
+\NormalTok{            TotalRequests}\OperatorTok{:}\NormalTok{ cumSnap}\OperatorTok{.}\NormalTok{TotalRequests}\OperatorTok{,}
+\NormalTok{            TotalErrors}\OperatorTok{:}\NormalTok{   cumSnap}\OperatorTok{.}\NormalTok{ErrorCount}\OperatorTok{,}
+        \OperatorTok{\},}
+    \OperatorTok{\}}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{real-time-alert-detection}{%
+\subsection{8. Real-Time Alert
+Detection}\label{real-time-alert-detection}}
+
+The ARCHER system should detect threshold breaches in real-time and push
+alerts to the dashboard:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{// internal/alerting/detector.go}
+\KeywordTok{type}\NormalTok{ ThresholdAlert }\KeywordTok{struct} \OperatorTok{\{}
+\NormalTok{    Type      }\DataTypeTok{string}    \StringTok{\textasciigrave{}json:"type"\textasciigrave{}}      \CommentTok{// "error\_rate", "p99\_latency"}
+\NormalTok{    Message   }\DataTypeTok{string}    \StringTok{\textasciigrave{}json:"message"\textasciigrave{}}
+\NormalTok{    Value     }\DataTypeTok{float64}   \StringTok{\textasciigrave{}json:"value"\textasciigrave{}}
+\NormalTok{    Threshold }\DataTypeTok{float64}   \StringTok{\textasciigrave{}json:"threshold"\textasciigrave{}}
+\NormalTok{    Severity  }\DataTypeTok{string}    \StringTok{\textasciigrave{}json:"severity"\textasciigrave{}}  \CommentTok{// "warning", "critical"}
+\NormalTok{    Timestamp time}\OperatorTok{.}\NormalTok{Time }\StringTok{\textasciigrave{}json:"ts"\textasciigrave{}}
+\OperatorTok{\}}
+
+\KeywordTok{type}\NormalTok{ AlertDetector }\KeywordTok{struct} \OperatorTok{\{}
+\NormalTok{    thresholds AlertThresholds}
+\NormalTok{    hub        }\OperatorTok{*}\NormalTok{websocket}\OperatorTok{.}\NormalTok{Hub}
+\NormalTok{    logger     }\OperatorTok{*}\NormalTok{zap}\OperatorTok{.}\NormalTok{Logger}
+    \CommentTok{// Track alert state to avoid repeated alerts for the same condition}
+\NormalTok{    lastAlerts }\KeywordTok{map}\OperatorTok{[}\DataTypeTok{string}\OperatorTok{]}\NormalTok{time}\OperatorTok{.}\NormalTok{Time}
+\NormalTok{    mu         sync}\OperatorTok{.}\NormalTok{Mutex}
+\OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{d }\OperatorTok{*}\NormalTok{AlertDetector}\OperatorTok{)}\NormalTok{ Evaluate}\OperatorTok{(}\NormalTok{runID }\DataTypeTok{string}\OperatorTok{,}\NormalTok{ snap Snapshot}\OperatorTok{)} \OperatorTok{\{}
+\NormalTok{    d}\OperatorTok{.}\NormalTok{checkErrorRate}\OperatorTok{(}\NormalTok{runID}\OperatorTok{,}\NormalTok{ snap}\OperatorTok{)}
+\NormalTok{    d}\OperatorTok{.}\NormalTok{checkLatency}\OperatorTok{(}\NormalTok{runID}\OperatorTok{,}\NormalTok{ snap}\OperatorTok{)}
+\OperatorTok{\}}
+
+\KeywordTok{func} \OperatorTok{(}\NormalTok{d }\OperatorTok{*}\NormalTok{AlertDetector}\OperatorTok{)}\NormalTok{ checkErrorRate}\OperatorTok{(}\NormalTok{runID }\DataTypeTok{string}\OperatorTok{,}\NormalTok{ snap Snapshot}\OperatorTok{)} \OperatorTok{\{}
+    \ControlFlowTok{if}\NormalTok{ snap}\OperatorTok{.}\NormalTok{ErrorRate }\OperatorTok{\textless{}}\NormalTok{ d}\OperatorTok{.}\NormalTok{thresholds}\OperatorTok{.}\NormalTok{ErrorRateWarning }\OperatorTok{\{}
+        \ControlFlowTok{return}
+    \OperatorTok{\}}
+\NormalTok{    severity }\OperatorTok{:=} \StringTok{"warning"}
+    \ControlFlowTok{if}\NormalTok{ snap}\OperatorTok{.}\NormalTok{ErrorRate }\OperatorTok{\textgreater{}=}\NormalTok{ d}\OperatorTok{.}\NormalTok{thresholds}\OperatorTok{.}\NormalTok{ErrorRateCritical }\OperatorTok{\{}
+\NormalTok{        severity }\OperatorTok{=} \StringTok{"critical"}
+    \OperatorTok{\}}
+
+\NormalTok{    d}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{Lock}\OperatorTok{()}
+\NormalTok{    lastAlert }\OperatorTok{:=}\NormalTok{ d}\OperatorTok{.}\NormalTok{lastAlerts}\OperatorTok{[}\StringTok{"error\_rate:"}\OperatorTok{+}\NormalTok{runID}\OperatorTok{]}
+\NormalTok{    d}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{Unlock}\OperatorTok{()}
+
+    \CommentTok{// Don\textquotesingle{}t repeat alert within 30s}
+    \ControlFlowTok{if}\NormalTok{ time}\OperatorTok{.}\NormalTok{Since}\OperatorTok{(}\NormalTok{lastAlert}\OperatorTok{)} \OperatorTok{\textless{}} \DecValTok{30}\OperatorTok{*}\NormalTok{time}\OperatorTok{.}\NormalTok{Second }\OperatorTok{\{}
+        \ControlFlowTok{return}
+    \OperatorTok{\}}
+
+\NormalTok{    alert }\OperatorTok{:=}\NormalTok{ ThresholdAlert}\OperatorTok{\{}
+\NormalTok{        Type}\OperatorTok{:}      \StringTok{"error\_rate"}\OperatorTok{,}
+\NormalTok{        Message}\OperatorTok{:}\NormalTok{   fmt}\OperatorTok{.}\NormalTok{Sprintf}\OperatorTok{(}\StringTok{"Error rate \%.1f\%\% exceeds threshold \%.1f\%\%"}\OperatorTok{,}\NormalTok{ snap}\OperatorTok{.}\NormalTok{ErrorRate}\OperatorTok{*}\DecValTok{100}\OperatorTok{,}\NormalTok{ d}\OperatorTok{.}\NormalTok{thresholds}\OperatorTok{.}\NormalTok{ErrorRateWarning}\OperatorTok{*}\DecValTok{100}\OperatorTok{),}
+\NormalTok{        Value}\OperatorTok{:}\NormalTok{     snap}\OperatorTok{.}\NormalTok{ErrorRate}\OperatorTok{,}
+\NormalTok{        Threshold}\OperatorTok{:}\NormalTok{ d}\OperatorTok{.}\NormalTok{thresholds}\OperatorTok{.}\NormalTok{ErrorRateWarning}\OperatorTok{,}
+\NormalTok{        Severity}\OperatorTok{:}\NormalTok{  severity}\OperatorTok{,}
+\NormalTok{        Timestamp}\OperatorTok{:}\NormalTok{ time}\OperatorTok{.}\NormalTok{Now}\OperatorTok{(),}
+    \OperatorTok{\}}
+
+\NormalTok{    payload}\OperatorTok{,}\NormalTok{ \_ }\OperatorTok{:=}\NormalTok{ json}\OperatorTok{.}\NormalTok{Marshal}\OperatorTok{(}\KeywordTok{map}\OperatorTok{[}\DataTypeTok{string}\OperatorTok{]}\NormalTok{any}\OperatorTok{\{}\StringTok{"type"}\OperatorTok{:} \StringTok{"alert"}\OperatorTok{,} \StringTok{"data"}\OperatorTok{:}\NormalTok{ alert}\OperatorTok{\})}
+\NormalTok{    d}\OperatorTok{.}\NormalTok{hub}\OperatorTok{.}\NormalTok{Broadcast}\OperatorTok{(}\NormalTok{runID}\OperatorTok{,}\NormalTok{ payload}\OperatorTok{)}
+
+\NormalTok{    d}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{Lock}\OperatorTok{()}
+\NormalTok{    d}\OperatorTok{.}\NormalTok{lastAlerts}\OperatorTok{[}\StringTok{"error\_rate:"}\OperatorTok{+}\NormalTok{runID}\OperatorTok{]} \OperatorTok{=}\NormalTok{ time}\OperatorTok{.}\NormalTok{Now}\OperatorTok{()}
+\NormalTok{    d}\OperatorTok{.}\NormalTok{mu}\OperatorTok{.}\NormalTok{Unlock}\OperatorTok{()}
+
+\NormalTok{    d}\OperatorTok{.}\NormalTok{logger}\OperatorTok{.}\NormalTok{Warn}\OperatorTok{(}\StringTok{"alert fired"}\OperatorTok{,}
+\NormalTok{        zap}\OperatorTok{.}\NormalTok{String}\OperatorTok{(}\StringTok{"run\_id"}\OperatorTok{,}\NormalTok{ runID}\OperatorTok{),}
+\NormalTok{        zap}\OperatorTok{.}\NormalTok{String}\OperatorTok{(}\StringTok{"type"}\OperatorTok{,}\NormalTok{ alert}\OperatorTok{.}\NormalTok{Type}\OperatorTok{),}
+\NormalTok{        zap}\OperatorTok{.}\NormalTok{String}\OperatorTok{(}\StringTok{"severity"}\OperatorTok{,}\NormalTok{ severity}\OperatorTok{),}
+\NormalTok{        zap}\OperatorTok{.}\NormalTok{Float64}\OperatorTok{(}\StringTok{"value"}\OperatorTok{,}\NormalTok{ snap}\OperatorTok{.}\NormalTok{ErrorRate}\OperatorTok{),}
+    \OperatorTok{)}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+The alert fires in-process (no external call), through the WebSocket hub
+(zero additional latency), and is deduplicated (no alert storm). The
+browser receives a distinct message type \texttt{"alert"} and renders a
+notification without polling.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{architectural-properties-of-real-time-systems}{%
+\subsection{9. Architectural Properties of Real-Time
+Systems}\label{architectural-properties-of-real-time-systems}}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+Property
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+ARCHER Implementation
+\end{minipage} \\
+\midrule()
+\endhead
+\textbf{Low write latency} & Worker results → buffered channel → no
+blocking \\
+\textbf{Low read latency} & WebSocket broadcast from in-memory
+snapshot \\
+\textbf{Backpressure isolation} & Slow WebSocket clients disconnected;
+don't affect pipeline \\
+\textbf{State recovery} & New client receives current snapshot
+immediately on connect \\
+\textbf{Durability independence} & DB write latency doesn't affect
+dashboard update frequency \\
+\textbf{Alert delivery} & In-process; no external round-trip \\
+\textbf{Sliding window accuracy} & 30s window prevents stale cumulative
+stats dominating display \\
+\textbf{Event sourcing} & Kafka replay enables recomputing any derived
+state \\
+\bottomrule()
+\end{longtable}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{key-takeaways-1}{%
+\subsection{Key Takeaways}\label{key-takeaways-1}}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Separate the real-time path from the durable path} --- DB
+  write latency must never affect WebSocket latency.
+\item
+  \textbf{Fixed-interval tickers amortize encoding cost} --- one JSON
+  encode per second at 50k events/s.
+\item
+  \textbf{Drop slow WebSocket clients} --- one slow browser must not
+  stall the hub goroutine.
+\item
+  \textbf{Send current state on reconnect} --- don't make recovering
+  clients wait for the next tick.
+\item
+  \textbf{Sliding window percentiles are more actionable} than
+  cumulative stats for live dashboards.
+\item
+  \textbf{In-process alert detection} through the WebSocket hub has zero
+  additional latency.
+\item
+  \textbf{Event sourcing from Kafka} enables stateless consumers and
+  arbitrary state replay.
+\end{enumerate}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{production-checklist-1}{%
+\subsection{Production Checklist}\label{production-checklist-1}}
+
+\begin{itemize}
+\tightlist
+\item[$\square$]
+  WebSocket broadcast path reads from in-memory accumulator only --- no
+  DB calls
+\item[$\square$]
+  Hub broadcasts via fixed-interval ticker (1s) --- not per-event
+\item[$\square$]
+  Slow client disconnected on buffer full --- non-blocking send with
+  \texttt{default}
+\item[$\square$]
+  Current snapshot sent immediately on new WebSocket connection
+\item[$\square$]
+  Sliding window (30s) used for dashboard percentile display
+\item[$\square$]
+  Alert deduplication prevents storm (30s suppression window per alert
+  type)
+\item[$\square$]
+  Kafka path and WebSocket path are independent --- DB slowness doesn't
+  delay dashboard
+\item[$\square$]
+  \texttt{DashboardSnapshot} type designed for direct browser chart
+  library consumption
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\emph{Next chapter: How the Complete ARCHER Backend Architecture Fits
+Together --- synthesizing all 18 chapters into the full system view.}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{chapter-19-how-the-complete-archer-backend-architecture-fits-together}{%
+\section{Chapter 19 --- How the Complete ARCHER Backend Architecture
+Fits
+Together}\label{chapter-19-how-the-complete-archer-backend-architecture-fits-together}}
+
+\begin{quote}
+\textbf{Engineering Learning Booklet \textbar{} ARCHER Backend
+Architecture Series} \emph{Synthesizing all 18 chapters into the
+complete system view --- data flows, concurrency interactions,
+deployment topology, and the engineering decisions that connect every
+component.}
+\end{quote}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{archer-in-one-sentence}{%
+\subsection{1. ARCHER in One Sentence}\label{archer-in-one-sentence}}
+
+ARCHER (Adaptive Real-time Concurrent HTTP-Engine and Router) is a
+distributed load benchmarking platform that: - \textbf{Generates}
+controlled concurrent HTTP load against target systems -
+\textbf{Collects} per-request telemetry from workers in real time -
+\textbf{Persists} events durably via Kafka to TimescaleDB -
+\textbf{Broadcasts} live metrics to dashboard clients via WebSocket -
+\textbf{Exposes} a REST API for run management and historical queries -
+\textbf{Operates} as multiple independently deployable Go binaries in
+Kubernetes
+
+Every design decision in the previous 18 chapters exists to make one of
+these five functions correct, scalable, and operable.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{the-four-binaries}{%
+\subsection{2. The Four Binaries}\label{the-four-binaries}}
+
+\begin{verbatim}
+archer/cmd/
+├── api/        # REST API + WebSocket server (user-facing)
+├── loadgen/    # Load generator (runs inside Kubernetes Jobs or long-lived Deployments)
+├── agent/      # Telemetry consumer (Kafka → TimescaleDB)
+└── worker/     # (Optional) standalone worker orchestrator for complex run topologies
+\end{verbatim}
+
+Each binary is independently deployable. The \texttt{api} can be scaled
+horizontally for read traffic. The \texttt{agent} is scaled to match
+Kafka partition count. The \texttt{loadgen} is launched as a Kubernetes
+Job per benchmark run. They communicate \textbf{only} through Kafka and
+the database --- not by direct API calls.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{complete-data-flow-a-single-load-test-run}{%
+\subsection{3. Complete Data Flow --- A Single Load Test
+Run}\label{complete-data-flow-a-single-load-test-run}}
+
+\begin{verbatim}
+USER ACTION: POST /api/v1/runs
+    │
+    ▼
+[archer-api]
+  RunHandler.CreateRun()
+    ├── Validate RunConfig
+    ├── runStore.Create(ctx, run)               → PostgreSQL: runs table
+    ├── kafkaProducer.Publish("archer.runs",    → Kafka: run created event
+    │       RunEvent{type: "created", runID})
+    └── Respond 201 with runID
+    │
+    ▼  (run goroutine spawned with context.Background() + run duration timeout)
+[archer-api: RunManager.StartRun()]
+    │
+    ▼
+[archer-loadgen: Runner.Run()]
+    ├── NewPool(concurrency=50)
+    ├── pool.Start(runCtx)           → 50 worker goroutines
+    ├── KafkaEmitter.Run(runCtx)     → batching goroutine
+    ├── telemetry.Pipeline.Run(runCtx)
+    │       ├── EventCollector.Run()   → owns MetricAccumulator state
+    │       └── MetricBroadcaster.Run() → WebSocket snapshots every 1s
+    │
+    │  [WORKER GOROUTINES × 50]
+    │  for each goroutine:
+    │    rate.Limiter.Wait(ctx)
+    │    HTTPJob.Execute(ctx) → http.Client.Do(request)
+    │    EventCollector.Collect(result) → buffered channel
+    │
+    ▼
+[archer-loadgen: EventCollector — single goroutine]
+    ├── Accumulates results in-memory
+    ├── Every 1s → Snapshot → MetricBroadcaster
+    │                      → KafkaEmitter.Emit()
+    │
+    ▼  (two paths diverge here)
+
+PATH A: WebSocket (real-time, <70ms end-to-end)
+    KafkaEmitter buffers events (non-blocking, drops on full)
+    MetricBroadcaster → hub.Broadcast(runID, payload)
+    WebSocket Hub goroutine → client.send channels (50 dashboard clients)
+    Browser receives JSON snapshot → renders chart
+    
+PATH B: Kafka → DB (durable, <665ms end-to-end)
+    KafkaEmitter → kafka.Writer.WriteMessages() (batched, every 100ms or 500 events)
+    Kafka Broker: archer.metrics (6 partitions, keyed by runID)
+    ↓
+[archer-agent: ConsumerPipeline]
+    kafka.Reader.ReadMessage() → msgCh
+    Worker goroutines (3) drain msgCh → batch accumulate
+    Every 500ms or 100 events → store.SaveBatch() → TimescaleDB
+
+    │
+    ▼
+USER ACTION: GET /api/v1/runs/{id}/metrics
+    runStore.Get() → PostgreSQL
+    store.GetLatestSnapshot() → TimescaleDB (singleflight deduplicated)
+    → JSON response
+\end{verbatim}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{concurrency-topology-map}{%
+\subsection{4. Concurrency Topology
+Map}\label{concurrency-topology-map}}
+
+Every component's goroutine count and ownership:
+
+\begin{verbatim}
+archer-api process:
+  1  main goroutine (blocks on server.Run)
+  1  HTTP server goroutine (net/http accept loop)
+  N  HTTP request handler goroutines (one per concurrent request)
+  1  WebSocket Hub goroutine (owns clients map)
+  2M WebSocket client goroutines (2 per connected client: readPump + writePump)
+  1  Kafka consumer goroutine (via Orchestrator)
+  1  Telemetry pipeline goroutine
+  1  pprof HTTP server goroutine
+  ─────────────────────────────────────
+  Total: ~(6 + N + 2M) goroutines
+
+archer-loadgen process (during active run):
+  1  main goroutine
+  C  worker goroutines (C = configured concurrency, e.g. 50)
+  1  EventCollector goroutine (owns accumulator)
+  1  KafkaEmitter goroutine (batching and publishing)
+  1  MetricBroadcaster goroutine (WS snapshot ticker)
+  1  Rate limiter goroutine (if RatePerSec > 0)
+  ─────────────────────────────────────
+  Total: ~(C + 5) goroutines = ~55 at concurrency=50
+
+archer-agent process:
+  1  main goroutine
+  1  Kafka reader goroutine (single reader, sequential)
+  W  Consumer worker goroutines (W = worker count, e.g. 3)
+  1  Orchestrator goroutine
+  ─────────────────────────────────────
+  Total: ~(W + 3) goroutines
+\end{verbatim}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{channel-ownership-map}{%
+\subsection{5. Channel Ownership Map}\label{channel-ownership-map}}
+
+Every channel in the system, who writes to it, and who reads from it:
+
+\begin{verbatim}
+archer-loadgen:
+  jobCh        chan Job        ← RunManager feeder goroutine
+                               → worker goroutines (50)
+
+  resultCh     chan Result     ← worker goroutines (50)
+                               → EventCollector goroutine
+
+  snapshotCh   chan Snapshot   ← EventCollector goroutine
+                               → Pipeline goroutine
+
+  emitCh       chan MetricEvent ← Pipeline goroutine
+                                → KafkaEmitter goroutine
+
+archer-api WebSocket Hub:
+  register     chan *Client    ← wsHandler goroutines (one per upgrade)
+                               → Hub.Run goroutine
+
+  unregister   chan *Client    ← readPump goroutines
+                               → Hub.Run goroutine
+
+  broadcast    chan BroadcastMsg ← MetricBroadcaster goroutine
+                                  ← AlertDetector (on threshold breach)
+                                → Hub.Run goroutine
+
+  client.send  chan []byte     ← Hub.Run goroutine (broadcast arm)
+                               → writePump goroutine (one per client)
+
+archer-agent:
+  msgCh        chan kafka.Message ← Kafka reader goroutine
+                                  → Consumer worker goroutines (3)
+\end{verbatim}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{error-propagation-map}{%
+\subsection{6. Error Propagation Map}\label{error-propagation-map}}
+
+How errors flow and where they are handled:
+
+\begin{verbatim}
+Worker HTTP error (4xx/5xx):
+  → Result{Err: UpstreamError{StatusCode: 429}}
+  → EventCollector.Collect() → accumulated as error count
+  → Prometheus counter incremented
+  → Dashboard shows error rate
+  → (No retry — benchmark wants to measure real failure rate)
+
+Worker context cancelled (run ended or SIGTERM):
+  → HTTPJob.Execute() returns Result{Err: context.Canceled}
+  → EventCollector.Collect() called with canceled result
+  → Workers exit select loop on ctx.Done()
+  → WaitGroup completes → close(resultCh) → EventCollector exits
+  → Pipeline performs final flush
+  → Final snapshot broadcast
+
+Kafka publish failure (transient):
+  → KafkaEmitter logs error + increments counter
+  → Continues — telemetry loss accepted
+  → kafka-go retries internally (MaxAttempts: 3)
+
+Kafka read failure in agent (transient):
+  → ConsumerWorker.Run() returns error
+  → Orchestrator: RestartOnFailure policy
+  → Exponential backoff (1s → 2s → 4s → ... → 30s)
+  → Reconnects and resumes from last committed offset
+
+DB write failure in agent:
+  → store.SaveBatch() returns error
+  → Batch logged and discarded (telemetry loss)
+  → Prometheus error counter incremented
+  → Alert if error rate exceeds threshold
+
+HTTP server panic:
+  → Recover middleware catches
+  → Logs panic + stack trace
+  → Returns 500 to client
+  → Server continues — does not crash
+\end{verbatim}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{kafka-event-flow}{%
+\subsection{7. Kafka Event Flow}\label{kafka-event-flow}}
+
+\begin{verbatim}
+Topics and their producers/consumers:
+
+archer.metrics (6 partitions, keyed by runID):
+  Producers:  archer-loadgen (KafkaEmitter, one per active run)
+  Consumers:  archer-agent consumer group (3 replicas, 2 partitions each)
+  Retention:  7 days
+  Schema:     MetricEvent{runID, workerID, latency, statusCode, timestamp}
+
+archer.runs (2 partitions, keyed by runID):
+  Producers:  archer-api (RunHandler.CreateRun, RunManager.StopRun)
+  Consumers:  archer-api (RunEventConsumer — drives report generation)
+              archer-loadgen (RunEventConsumer — receives abort signals)
+  Retention:  30 days
+  Schema:     RunEvent{type, runID, config, timestamp}
+
+archer.metrics.dlq (1 partition):
+  Producers:  archer-agent (DLQProducer — unparseable messages)
+  Consumers:  Manual inspection / ops tooling
+  Retention:  30 days
+\end{verbatim}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{deployment-topology}{%
+\subsection{8. Deployment Topology}\label{deployment-topology}}
+
+\begin{verbatim}
+Kubernetes Cluster:
+┌────────────────────────────────────────────────────────────────┐
+│ Namespace: archer                                              │
+│                                                                │
+│  Deployment: archer-api          (replicas: 3)                 │
+│    - REST API + WebSocket server                               │
+│    - Sticky sessions for WebSocket (sessionAffinity: ClientIP) │
+│    - HPA: scale on CPU > 70%                                   │
+│    - Resources: 2 CPU, 512Mi memory                            │
+│    - /readyz checks: DB ping + Kafka ping + worker health      │
+│                                                                │
+│  Deployment: archer-agent        (replicas: 3)                 │
+│    - Kafka consumer → TimescaleDB                              │
+│    - Replicas must equal kafka partition count / N workers     │
+│    - Resources: 1 CPU, 256Mi memory                            │
+│    - /readyz checks: Kafka connectivity + DB connectivity      │
+│                                                                │
+│  Job: archer-loadgen-{runID}     (one per benchmark run)       │
+│    - Created by API on POST /runs                              │
+│    - Deleted on completion or TTL (24h)                        │
+│    - Resources: 2 CPU, 512Mi memory                            │
+│    - No readiness probe — it's a Job, not a Service            │
+│                                                                │
+│  StatefulSet: kafka              (replicas: 3)                 │
+│  StatefulSet: timescaledb        (replicas: 1 + 1 replica)     │
+│                                                                │
+│  Service: archer-api-svc         (ClusterIP + Ingress)         │
+│  Service: kafka-svc              (headless for broker DNS)     │
+│  Service: db-svc                 (ClusterIP)                   │
+└────────────────────────────────────────────────────────────────┘
+\end{verbatim}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{graceful-shutdown-the-complete-flow}{%
+\subsection{9. Graceful Shutdown --- The Complete
+Flow}\label{graceful-shutdown-the-complete-flow}}
+
+When Kubernetes sends SIGTERM to \texttt{archer-api}:
+
+\begin{verbatim}
+t=0s    SIGTERM received
+        signal.NotifyContext cancels root ctx
+
+t=0-5s  preStop sleep: endpoint removed from load balancer
+        New connections redirected to other pods
+        In-flight requests still accepted
+
+t=5s    server.Shutdown(20s) called
+        HTTP: stop Accept(); complete in-flight handlers
+        WebSocket: Hub.Run ctx cancelled → sends CloseGoingAway to all clients
+        Orchestrator ctx cancelled → all workers see ctx.Done()
+
+t=5-15s Workers drain:
+        - Kafka consumer commits final offsets, closes reader
+        - Telemetry pipeline performs final flush to Kafka
+        - WebSocket hub closes all client channels
+
+t=15s   runner.Wait() returns — all goroutines exited
+
+t=15-18s Infrastructure shutdown (in order):
+        kafkaProducer.Close() → flushes pending batch
+        kafkaConsumer.Close() → commits offsets
+        db.Close()            → releases connection pool
+
+t=18s   logger.Sync() → flushes buffered log writes
+        verifyCleanShutdown() → runtime.NumGoroutine() should be ~3
+
+t=19s   os.Exit(0)
+
+t=40s   Kubernetes SIGKILL deadline (never reached)
+\end{verbatim}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{observability-strategy}{%
+\subsection{10. Observability Strategy}\label{observability-strategy}}
+
+\begin{verbatim}
+Layer               Tool              What It Measures
+──────────────────────────────────────────────────────────────────
+Application metrics  Prometheus        RPS, latency histograms, error rates,
+                                       worker pool depth, Kafka lag, goroutine count
+
+Structured logs      Zap → Loki        Request/response logs, error details,
+                                       run lifecycle events, backoff events
+
+Distributed tracing  OpenTelemetry     (Future) Cross-service trace correlation
+                     → Jaeger          for debugging slow runs
+
+Runtime profiling    pprof             Goroutine stacks, heap allocations,
+                     (internal port)   mutex contention, CPU hotspots
+
+Kafka monitoring     Kafka Exporter    Consumer group lag, partition offset,
+                     → Prometheus      broker health, topic throughput
+
+DB monitoring        pg_stat_statements Query latency, connection pool saturation,
+                     → Prometheus      slow query detection
+
+Dashboard            Grafana           All of the above in unified panels
+\end{verbatim}
+
+The Grafana dashboard for ARCHER has panels: 1. \textbf{Benchmark Live
+View} --- P50/P95/P99 from WebSocket (proxied by API) 2.
+\textbf{Pipeline Health} --- Kafka consumer lag, DB write latency,
+emitter drop rate 3. \textbf{System Resources} --- CPU, memory,
+goroutine count per pod 4. \textbf{Error Analysis} --- error rate by
+status code, DLQ message rate 5. \textbf{Run History} --- timeline of
+all runs with completion status
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{the-api-contract-summary}{%
+\subsection{11. The API Contract
+(Summary)}\label{the-api-contract-summary}}
+
+\begin{verbatim}
+REST API:
+  POST   /api/v1/runs                    Create and start a load test run
+  GET    /api/v1/runs                    List runs (filter by status)
+  GET    /api/v1/runs/{id}               Get run details and status
+  DELETE /api/v1/runs/{id}              Stop a running run
+  GET    /api/v1/runs/{id}/metrics       Latest snapshot (DB-backed)
+  GET    /api/v1/runs/{id}/percentiles   Full percentile report
+
+WebSocket:
+  GET    /api/v1/runs/{id}/ws            Live metric stream for a run
+
+Operational:
+  GET    /healthz                        Liveness probe
+  GET    /readyz                         Readiness probe
+  GET    /metrics                        Prometheus scrape endpoint
+  PUT    /admin/log-level               Dynamic log level change
+  GET    /debug/pprof/*                  Go runtime profiling (internal only)
+\end{verbatim}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{what-each-chapter-built}{%
+\subsection{12. What Each Chapter Built}\label{what-each-chapter-built}}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+Chapter
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Component in ARCHER
+\end{minipage} \\
+\midrule()
+\endhead
+01 & Mental model for goroutine/channel/binary design \\
+02 & \texttt{cmd/}, \texttt{internal/}, \texttt{pkg/} layout; DI in
+\texttt{main()} \\
+03 & \texttt{MetricStore} interface, \texttt{Job} interface, decorator
+pattern \\
+04 & \texttt{writeStoreError}, error classification in consumer loop \\
+05 & \texttt{GOMAXPROCS} via \texttt{automaxprocs}; supervisor pattern
+in Orchestrator \\
+06 & Channel topology: Hub channels, pipeline channels,
+fan-out/fan-in \\
+07 & \texttt{Pool} struct; \texttt{Runner} with rate limiter; metric
+accumulator \\
+08 & Context hierarchy (run → worker → request); graceful shutdown \\
+09 & REST API server with middleware chain, \texttt{/healthz},
+\texttt{/readyz} \\
+10 & WebSocket Hub; read/write pumps; ping/pong; run-scoped broadcast \\
+11 & Kafka producer (batched); consumer with DLQ; at-least-once \\
+12 & Multi-stage Dockerfile; \texttt{GOMEMLIMIT}; preStop; K8s probes \\
+13 & EventCollector (single-goroutine); dual-path pipeline; sliding
+window \\
+14 & Zap structured logging; three-source config; atomic log level \\
+15 & Five-phase lifecycle; \texttt{Runner}; shutdown timeout budget \\
+16 & \texttt{errgroup}; \texttt{singleflight}; \texttt{atomic.Pointer};
+backpressure pipeline \\
+17 & \texttt{Worker} interface; \texttt{Orchestrator}; retry with
+jitter; \texttt{RunManager} \\
+18 & Real-time latency budget; event sourcing; backpressure isolation \\
+\bottomrule()
+\end{longtable}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{key-takeaways-2}{%
+\subsection{Key Takeaways}\label{key-takeaways-2}}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{ARCHER's architecture is a direct application of Go's design
+  principles} --- every pattern in the language is used purposefully.
+\item
+  \textbf{The separation of real-time path (WebSocket) from durable path
+  (Kafka→DB)} is the central architectural decision --- they are
+  independent failure domains.
+\item
+  \textbf{Every goroutine is owned and tracked} --- nothing runs without
+  a documented exit condition and a \texttt{sync.WaitGroup} entry.
+\item
+  \textbf{Context is the nervous system} --- it connects shutdown
+  signals from \texttt{main()} to every network call in the system.
+\item
+  \textbf{The four binaries are independently scalable} --- the system
+  scales by adding agent replicas, not by making a monolith bigger.
+\item
+  \textbf{Observability is not an afterthought} --- every component has
+  Prometheus metrics, structured logs, and pprof access.
+\end{enumerate}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\emph{Final chapter: Production Engineering Mindset for Distributed
+Systems --- how to think, debug, and operate at scale.}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{chapter-20-production-engineering-mindset-for-distributed-systems}{%
+\section{Chapter 20 --- Production Engineering Mindset for Distributed
+Systems}\label{chapter-20-production-engineering-mindset-for-distributed-systems}}
+
+\begin{quote}
+\textbf{Engineering Learning Booklet \textbar{} ARCHER Backend
+Architecture Series} \emph{How strong backend engineers think, debug,
+operate, and make decisions under pressure --- the mindset that
+separates working systems from reliable ones.}
+\end{quote}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{the-mindset-is-the-skill}{%
+\subsection{1. The Mindset Is the
+Skill}\label{the-mindset-is-the-skill}}
+
+Every technical pattern in the previous 19 chapters is learnable. What
+separates engineers who build systems that stay up from those who build
+systems that work in demos is not knowledge of any specific API --- it
+is a way of thinking about systems that becomes instinctive over time.
+
+This chapter is about that way of thinking. It will not introduce new Go
+code. It will challenge you to internalize the reasoning behind every
+decision you've seen so far, so that you can make new decisions
+correctly when you encounter situations this curriculum didn't
+anticipate.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{think-in-failure-modes-first}{%
+\subsection{2. Think in Failure Modes
+First}\label{think-in-failure-modes-first}}
+
+Every system design decision should begin with: \textbf{what happens
+when this fails?}
+
+Not ``will this fail'' --- everything fails. The questions are: -
+\textbf{How does it fail?} (silently, loudly, with data loss, with
+partial writes) - \textbf{Who is affected?} (one user, all users, only
+telemetry) - \textbf{Can it recover automatically?} (retry, reconnect,
+replay) - \textbf{What is the data loss window?} (zero, milliseconds,
+seconds)
+
+Apply this to every ARCHER component:
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+Component
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Failure Mode
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Automatic Recovery
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Data Loss
+\end{minipage} \\
+\midrule()
+\endhead
+Load generator worker & HTTP timeout & Yes --- next job starts & None \\
+Kafka emitter buffer full & Drop event & Yes --- drops silently & Metric
+event lost \\
+Kafka broker unreachable & Consumer stops & Yes --- reconnect with
+backoff & Events buffered in Kafka \\
+DB write failure & Batch discarded & Partial --- retry on next batch &
+Metric snapshot lost \\
+WebSocket client disconnect & Client disconnects & Yes --- client
+reconnects & Missed snapshots \\
+API pod SIGTERM & Pod drains & Yes --- other pods serve traffic & None
+(if drain works) \\
+Full pod crash (OOM) & SIGKILL --- no drain & Yes --- Kubernetes
+restarts & In-flight requests lost \\
+\bottomrule()
+\end{longtable}
+
+When you can answer this table for your system from memory, you
+understand your system.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{the-three-questions-before-any-change}{%
+\subsection{3. The Three Questions Before Any
+Change}\label{the-three-questions-before-any-change}}
+
+Before adding a feature, optimizing a path, or changing a configuration:
+
+\textbf{1. What is the measured problem?} Not ``I think the latency is
+high'' --- show the pprof flamegraph, the Prometheus histogram, the p99
+from Grafana. If you cannot point to a measurement, you are solving an
+imaginary problem. Premature optimization is the most common form of
+wasted engineering time.
+
+\textbf{2. What is the failure mode of this change?} ``If this change is
+wrong, what breaks and how do I know?'' A change that fails silently
+(drops metrics with no counter) is more dangerous than one that fails
+loudly (panics in staging). Prefer loud failures in dev; ensure silent
+failures have counters in prod.
+
+\textbf{3. Can I reverse it?} Feature flags, config changes, and
+database schema changes have different reversibility profiles. A config
+change is reversible in seconds. A non-backwards-compatible schema
+migration is reversible only with a second migration. Know the reversal
+cost before you deploy.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{operational-simplicity-is-a-feature}{%
+\subsection{4. Operational Simplicity Is a
+Feature}\label{operational-simplicity-is-a-feature}}
+
+The most underrated engineering virtue is \textbf{simplicity of
+operation}. A system that requires 20 manual steps to deploy, debug, or
+recover is a system that fails at 3am when the engineer on call is
+tired.
+
+\textbf{Complexity tax} --- every piece of complexity you add is paid
+in: - Cognitive load on every future engineer - Time to debug under
+pressure - Surface area for subtle failure modes - Friction in
+onboarding new team members
+
+For ARCHER specifically: - Four binaries is simpler than twenty
+microservices - One Kafka topic per logical event type is simpler than
+per-run topics - One JSON config file + env override is simpler than a
+service mesh config system - \texttt{make\ up} starting the full stack
+is simpler than a 50-page runbook
+
+\textbf{Ask of every complexity you introduce}: what does this simplify
+for the operator? If the answer is nothing, it's debt.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{the-debugging-mindset}{%
+\subsection{5. The Debugging Mindset}\label{the-debugging-mindset}}
+
+When something breaks in production, the debugging process is:
+
+\hypertarget{triage-what-changed}{%
+\subsubsection{5.1 Triage --- What Changed?}\label{triage-what-changed}}
+
+Before reading a single log line: \textbf{what changed recently?} - New
+deployment in the last hour? - Config change? - Traffic pattern change
+(spike, new client)? - External dependency change (Kafka version, DB
+schema)?
+
+80\% of production incidents are caused by recent changes. Start there.
+
+\hypertarget{narrow-the-blast-radius}{%
+\subsubsection{5.2 Narrow the Blast
+Radius}\label{narrow-the-blast-radius}}
+
+Is the problem: - \textbf{One user or all users?} → individual vs
+systemic - \textbf{One service or all services?} → localized vs
+cascading - \textbf{One region or all regions?} → infrastructure vs
+application - \textbf{All operations or one endpoint?} → specific
+handler vs general failure
+
+The answer determines where you look first.
+
+\hypertarget{follow-the-data}{%
+\subsubsection{5.3 Follow the Data}\label{follow-the-data}}
+
+In a distributed system, follow the event through each stage:
+
+\begin{verbatim}
+User reports: "Dashboard not updating during run"
+
+1. Is the load generator running?
+   → Check archer-loadgen pod logs: is it submitting jobs?
+   → Check Prometheus: archer_pool_active_workers > 0?
+
+2. Are events reaching Kafka?
+   → Check Kafka consumer lag: is archer.metrics lag growing?
+   → Check KafkaEmitter drop counter: events being dropped?
+
+3. Is the consumer processing?
+   → Check archer-agent logs: any errors?
+   → Check DB: new rows in metrics table for this run_id?
+
+4. Is the WebSocket broadcasting?
+   → Check archer-api logs: any WebSocket disconnect errors?
+   → Check Prometheus: websocket_clients_connected > 0 for this run?
+
+5. Is the browser receiving?
+   → Open browser DevTools → Network → WS → check frames
+\end{verbatim}
+
+This is the ``follow the data'' approach: trace the event from source to
+sink, checking each stage until the break is found.
+
+\hypertarget{the-5-minute-rule}{%
+\subsubsection{5.4 The 5-Minute Rule}\label{the-5-minute-rule}}
+
+If you haven't formed a hypothesis within 5 minutes of looking at logs,
+step back. You are reading without a mental model. Ask: - What should I
+be seeing that I'm not seeing? - What am I seeing that shouldn't be
+there? - What is the simplest explanation that fits all the evidence?
+
+Form a hypothesis first. Then look for evidence that disproves it.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{scalability-reasoning-think-in-orders-of-magnitude}{%
+\subsection{6. Scalability Reasoning --- Think in Orders of
+Magnitude}\label{scalability-reasoning-think-in-orders-of-magnitude}}
+
+When evaluating an architectural decision, reason through orders of
+magnitude:
+
+\textbf{Current scale}: 50 concurrent workers, 1 run at a time, 1
+dashboard client. \textbf{10× scale}: 500 workers, 10 concurrent runs,
+50 dashboard clients. \textbf{100× scale}: 5000 workers, 100 concurrent
+runs, 500 dashboard clients.
+
+For each jump, identify what breaks:
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+Component
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Breaks at 10×
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Solution
+\end{minipage} \\
+\midrule()
+\endhead
+Single Kafka partition & Partition becomes throughput bottleneck &
+Increase to 60 partitions \\
+Single \texttt{archer-agent} & Cannot consume all partitions & Scale to
+10 replicas \\
+WebSocket Hub (one process) & Memory: 500 clients × 2 goroutines × 2KB =
+2MB & Fine --- scale to 5000 easily \\
+\texttt{singleflight} on metrics & More clients → more deduplication
+benefit & Already handled \\
+\texttt{archer-api} single process & CPU saturation on JSON encoding &
+Scale horizontally (HPA) \\
+TimescaleDB single node & Write throughput & Hypertable partitioning +
+read replica \\
+\bottomrule()
+\end{longtable}
+
+Identifying the bottleneck for each order of magnitude tells you what
+not to optimize yet. A system that handles today's load well and has a
+clear path to 10× is the right initial design.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{production-tradeoffs-explicit-not-accidental}{%
+\subsection{7. Production Tradeoffs --- Explicit, Not
+Accidental}\label{production-tradeoffs-explicit-not-accidental}}
+
+Every production system makes tradeoffs. The difference between
+experienced engineers and novices is that experienced engineers make
+tradeoffs \textbf{consciously and explicitly}, while novices make them
+\textbf{accidentally}.
+
+ARCHER's explicit tradeoffs:
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+Decision
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+What We Chose
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+What We Gave Up
+\end{minipage} \\
+\midrule()
+\endhead
+Kafka emitter drops on full buffer & Benchmark accuracy preserved & Some
+telemetry events lost \\
+At-least-once Kafka delivery & Simpler consumer logic & Potential
+duplicate metric events \\
+WebSocket disconnect slow clients & All clients unaffected & Slow
+clients lose data \\
+Fixed 1s broadcast interval & Predictable, low overhead & 1s dashboard
+lag \\
+In-memory accumulator (not Redis) & Zero network latency & Lost if
+process crashes \\
+Four binaries not one monolith & Independent scalability & More
+deployment complexity \\
+\texttt{FROM\ scratch} Docker image & Minimal attack surface & No shell
+for debugging \\
+\bottomrule()
+\end{longtable}
+
+Write your tradeoffs down. Put them in the README. Review them as the
+system evolves --- what was the right tradeoff at 1k req/s may be wrong
+at 1M req/s.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{build-iteratively-the-right-sequence}{%
+\subsection{8. Build Iteratively --- The Right
+Sequence}\label{build-iteratively-the-right-sequence}}
+
+The ARCHER build sequence for a hackathon:
+
+\textbf{Day 1: The spine} 1. Project structure (Chapter 2 layout) 2.
+Config + logger (Chapter 14) 3. \texttt{MemoryMetricStore}
+implementation (Chapter 2/3) 4. REST API skeleton with \texttt{/healthz}
+(Chapter 9) 5. Verify: \texttt{curl\ localhost:8080/healthz} returns 200
+
+\textbf{Day 2: The load generator} 1. \texttt{HTTPJob.Execute} (Chapter
+3) 2. \texttt{Pool} with 10 workers (Chapter 7) 3.
+\texttt{EventCollector} goroutine (Chapter 13) 4. Run a load test
+against a local echo server 5. Verify: metrics accumulate correctly
+
+\textbf{Day 3: The pipeline} 1. Kafka integration (Chapter 11) ---
+producer + consumer 2. \texttt{MetricBroadcaster} (Chapter 10) ---
+WebSocket snapshots 3. WebSocket Hub (Chapter 10) 4. Verify: dashboard
+receives live updates during a run
+
+\textbf{Day 4: Production readiness} 1. Graceful shutdown (Chapter 15)
+2. Docker builds for all binaries (Chapter 12) 3. Docker Compose for
+local stack 4. Prometheus metrics on key paths (Chapter 13) 5. Verify:
+\texttt{SIGTERM} → clean drain → zero dropped requests
+
+\textbf{Day 5: Integration and hardening} 1. Error handling audit ---
+every \texttt{if\ err\ !=\ nil} has a decision 2. Context propagation
+audit --- every I/O call uses \texttt{ctx} 3. Goroutine leak check ---
+\texttt{runtime.NumGoroutine()} stable under load 4. Load test ARCHER
+against itself 5. Demo rehearsal: run a 60-second test, watch live
+dashboard, check DB
+
+This sequence ships working software at the end of every day. Day 1 ends
+with a running service. Day 2 ends with working load generation. Delay
+is not death --- a demo with Day 1--3 completed is more impressive than
+a half-finished Day 1--5 attempt.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{the-concurrency-mental-checklist}{%
+\subsection{9. The Concurrency Mental
+Checklist}\label{the-concurrency-mental-checklist}}
+
+Before writing any concurrent code, answer these questions:
+
+\textbf{1. Who owns this data?} If multiple goroutines can reach it, you
+need a synchronization decision. Choose one: channel (transfer
+ownership), mutex (shared with lock), atomic (simple counter/flag).
+
+\textbf{2. What is the exit condition for this goroutine?} Write it
+before you write the goroutine body. If you can't answer it clearly, you
+have a leak.
+
+\textbf{3. What happens if this channel is full?} Blocking =
+backpressure (intentional). Non-blocking \texttt{default} = drop
+(intentional). If you haven't decided, it will surprise you in
+production.
+
+\textbf{4. Is this goroutine tied to a context?} If not, it will run
+until SIGKILL. Add \texttt{\textless{}-ctx.Done()} before you ship it.
+
+\textbf{5. Can this goroutine panic?} If yes and it's long-running, add
+\texttt{defer\ recover()}. The HTTP recover middleware doesn't protect
+goroutines you start yourself.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{the-observability-first-development-loop}{%
+\subsection{10. The Observability-First Development
+Loop}\label{the-observability-first-development-loop}}
+
+Write code in this order: \textbf{metrics first, then logic, then
+tests}.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{// Step 1: Define what you\textquotesingle{}ll observe}
+\KeywordTok{var} \OperatorTok{(}
+\NormalTok{    batchesFlushed }\OperatorTok{=}\NormalTok{ promauto}\OperatorTok{.}\NormalTok{NewCounter}\OperatorTok{(}\NormalTok{prometheus}\OperatorTok{.}\NormalTok{CounterOpts}\OperatorTok{\{}\NormalTok{Name}\OperatorTok{:} \StringTok{"archer\_batches\_flushed\_total"}\OperatorTok{\})}
+\NormalTok{    batchSize      }\OperatorTok{=}\NormalTok{ promauto}\OperatorTok{.}\NormalTok{NewHistogram}\OperatorTok{(}\NormalTok{prometheus}\OperatorTok{.}\NormalTok{HistogramOpts}\OperatorTok{\{}\NormalTok{Name}\OperatorTok{:} \StringTok{"archer\_batch\_size"}\OperatorTok{,}\NormalTok{ Buckets}\OperatorTok{:} \OperatorTok{[]}\DataTypeTok{float64}\OperatorTok{\{}\DecValTok{1}\OperatorTok{,} \DecValTok{10}\OperatorTok{,} \DecValTok{50}\OperatorTok{,} \DecValTok{100}\OperatorTok{,} \DecValTok{500}\OperatorTok{\}\})}
+\NormalTok{    flushDuration  }\OperatorTok{=}\NormalTok{ promauto}\OperatorTok{.}\NormalTok{NewHistogram}\OperatorTok{(}\NormalTok{prometheus}\OperatorTok{.}\NormalTok{HistogramOpts}\OperatorTok{\{}\NormalTok{Name}\OperatorTok{:} \StringTok{"archer\_flush\_duration\_seconds"}\OperatorTok{,}\NormalTok{ Buckets}\OperatorTok{:}\NormalTok{ prometheus}\OperatorTok{.}\NormalTok{DefBuckets}\OperatorTok{\})}
+\OperatorTok{)}
+
+\CommentTok{// Step 2: Write the logic with instrumentation inline}
+\KeywordTok{func} \OperatorTok{(}\NormalTok{c }\OperatorTok{*}\NormalTok{Consumer}\OperatorTok{)}\NormalTok{ flush}\OperatorTok{(}\NormalTok{ctx context}\OperatorTok{.}\NormalTok{Context}\OperatorTok{,}\NormalTok{ batch }\OperatorTok{[]}\NormalTok{Snapshot}\OperatorTok{)} \OperatorTok{\{}
+\NormalTok{    start }\OperatorTok{:=}\NormalTok{ time}\OperatorTok{.}\NormalTok{Now}\OperatorTok{()}
+    \ControlFlowTok{defer} \KeywordTok{func}\OperatorTok{()} \OperatorTok{\{}
+\NormalTok{        flushDuration}\OperatorTok{.}\NormalTok{Observe}\OperatorTok{(}\NormalTok{time}\OperatorTok{.}\NormalTok{Since}\OperatorTok{(}\NormalTok{start}\OperatorTok{).}\NormalTok{Seconds}\OperatorTok{())}
+\NormalTok{        batchesFlushed}\OperatorTok{.}\NormalTok{Inc}\OperatorTok{()}
+\NormalTok{        batchSize}\OperatorTok{.}\NormalTok{Observe}\OperatorTok{(}\DataTypeTok{float64}\OperatorTok{(}\BuiltInTok{len}\OperatorTok{(}\NormalTok{batch}\OperatorTok{)))}
+    \OperatorTok{\}()}
+
+    \ControlFlowTok{if}\NormalTok{ err }\OperatorTok{:=}\NormalTok{ c}\OperatorTok{.}\NormalTok{store}\OperatorTok{.}\NormalTok{SaveBatch}\OperatorTok{(}\NormalTok{ctx}\OperatorTok{,}\NormalTok{ batch}\OperatorTok{);}\NormalTok{ err }\OperatorTok{!=} \OtherTok{nil} \OperatorTok{\{}
+\NormalTok{        flushErrors}\OperatorTok{.}\NormalTok{Inc}\OperatorTok{()}
+\NormalTok{        c}\OperatorTok{.}\NormalTok{logger}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\StringTok{"flush failed"}\OperatorTok{,}\NormalTok{ zap}\OperatorTok{.}\NormalTok{Int}\OperatorTok{(}\StringTok{"batch\_size"}\OperatorTok{,} \BuiltInTok{len}\OperatorTok{(}\NormalTok{batch}\OperatorTok{)),}\NormalTok{ zap}\OperatorTok{.}\NormalTok{Error}\OperatorTok{(}\NormalTok{err}\OperatorTok{))}
+        \ControlFlowTok{return}
+    \OperatorTok{\}}
+\OperatorTok{\}}
+
+\CommentTok{// Step 3: Write the test that verifies the behavior}
+\KeywordTok{func}\NormalTok{ TestConsumer\_FlushOnTimeout}\OperatorTok{(}\NormalTok{t }\OperatorTok{*}\NormalTok{testing}\OperatorTok{.}\NormalTok{T}\OperatorTok{)} \OperatorTok{\{}
+    \CommentTok{// ...}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+When you observe metrics from the start, you know the system is behaving
+correctly during development --- not just at demo time. The Grafana
+panel that shows \texttt{archer\_flush\_duration\_seconds} p99 during a
+load test is your continuous integration against your performance
+expectations.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{what-strong-engineers-do-differently}{%
+\subsection{11. What Strong Engineers Do
+Differently}\label{what-strong-engineers-do-differently}}
+
+\textbf{They read the error, not just the presence of error.}
+\texttt{if\ err\ !=\ nil\ \{\ return\ err\ \}} is not error handling ---
+it is error propagation. Error handling is making a decision: retry,
+skip, abort, alert.
+
+\textbf{They understand what they didn't write.} The Go runtime, the OS
+scheduler, the TCP stack, the Kafka broker --- these are parts of your
+system that you didn't write. Understanding their failure modes is part
+of your job.
+
+\textbf{They design for the operator, not the author.} The person who
+fixes the 3am incident may not be you. Every log message, every metric
+name, every config option is a message to that future person.
+
+\textbf{They distinguish between ``working'' and ``correct''.} A load
+generator that produces 50k req/s and loses 30\% of its metrics is
+``working.'' Instrumentation that shows the drop rate is what makes it
+``correct'' or at least honestly broken.
+
+\textbf{They know when to stop engineering.} The best architecture for a
+hackathon is not the best architecture for a 50-engineer company.
+Gold-plating a system that needs to work for 48 hours is a waste. Know
+your time horizon.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{the-archer-engineering-principles-summarized}{%
+\subsection{12. The ARCHER Engineering Principles
+(Summarized)}\label{the-archer-engineering-principles-summarized}}
+
+These are the principles distilled from 20 chapters of decisions:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  \textbf{Goroutines are cheap. Use them per-request, per-connection,
+  per-job.} Never pre-allocate thread pools. Trust the scheduler.
+\item
+  \textbf{Own your state explicitly.} One goroutine owns one piece of
+  state. All communication through channels or explicit synchronization.
+\item
+  \textbf{Context is the shutdown contract.} Every I/O call, every
+  goroutine, every ticker reads \texttt{ctx.Done()}. No exceptions.
+\item
+  \textbf{Errors are decisions.} Classify every error as: transient
+  (retry), permanent (DLQ/skip), or shutdown signal (return nil). Never
+  swallow without a counter.
+\item
+  \textbf{Interfaces at the consumption site.} Define what you need, not
+  what you provide. Keep interfaces under 4 methods.
+\item
+  \textbf{Measure before optimizing.} \texttt{go\ test\ -bench},
+  \texttt{go\ tool\ pprof}, Prometheus histograms. If you can't measure
+  it, you can't improve it.
+\item
+  \textbf{Instrument everything that matters.} Active workers, queue
+  depth, error rate, flush latency, goroutine count. Metrics are
+  documentation that updates itself.
+\item
+  \textbf{Design the shutdown before the startup.} A service that shuts
+  down cleanly is a service that can be deployed continuously. Graceful
+  shutdown is not optional.
+\item
+  \textbf{Simplicity compounds.} A simple design that works at 10× is
+  better than a complex design that barely works now. Every abstraction
+  you add is a tax on every future engineer.
+\item
+  \textbf{The binary is the unit of deployment.} One concern per binary.
+  Independent scale. Explicit communication via Kafka and REST.
+\end{enumerate}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{what-comes-after-this-curriculum}{%
+\subsection{13. What Comes After This
+Curriculum}\label{what-comes-after-this-curriculum}}
+
+Having completed these 20 chapters, you can: - Understand and navigate
+any Go backend codebase - Design the ARCHER distributed benchmarking
+platform from scratch - Reason about goroutine lifecycle, channel
+ownership, and context propagation - Build production-grade Kafka
+producers and consumers - Deploy Go services in Docker and Kubernetes
+correctly - Debug production incidents with pprof, Prometheus, and
+structured logs - Make explicit architectural tradeoffs and communicate
+them clearly
+
+What is not in this curriculum (yet): - \textbf{gRPC} --- inter-service
+RPC at high throughput (read: gRPC in Go docs + Evans CLI) -
+\textbf{OpenTelemetry} --- distributed tracing across services (add
+after core observability works) - \textbf{Service mesh (Istio)} ---
+mTLS, circuit breaking at the infrastructure layer - \textbf{Database
+schema design} --- TimescaleDB hypertables, indexing, retention policies
+- \textbf{Kubernetes operator pattern} --- if ARCHER needs to
+auto-provision load test infrastructure - \textbf{Go generics
+(advanced)} --- beyond \texttt{Pool{[}T,R{]}} to constraint-based type
+programming
+
+Study these in the order ARCHER needs them, not in the order they are
+interesting.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{key-takeaways-3}{%
+\subsection{Key Takeaways}\label{key-takeaways-3}}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Failure mode thinking} is the most important engineering habit
+  --- what breaks, who is affected, does it recover.
+\item
+  \textbf{Three questions before any change}: what is the measured
+  problem, what is the failure mode, can I reverse it.
+\item
+  \textbf{Operational simplicity is a feature} --- complexity is a tax
+  paid by every future operator.
+\item
+  \textbf{Follow the data} in debugging --- trace from source to sink
+  until the break is found.
+\item
+  \textbf{Explicit tradeoffs} --- write down what you chose and what you
+  gave up; review as the system scales.
+\item
+  \textbf{Build iteratively} --- ship working software at the end of
+  every day; resist the urge to complete the full design before
+  verifying the spine.
+\item
+  \textbf{Observability-first development} --- metrics before logic;
+  know the system is correct, not just running.
+\end{enumerate}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{final-production-checklist-the-complete-archer-readiness-audit}{%
+\subsection{Final Production Checklist --- The Complete ARCHER Readiness
+Audit}\label{final-production-checklist-the-complete-archer-readiness-audit}}
+
+\hypertarget{code-quality}{%
+\subsubsection{Code Quality}\label{code-quality}}
+
+\begin{itemize}
+\tightlist
+\item[$\square$]
+  \texttt{go\ test\ -race\ ./...} passes with zero races
+\item[$\square$]
+  \texttt{go\ vet\ ./...} passes with no warnings
+\item[$\square$]
+  \texttt{golangci-lint\ run\ ./...} clean (at minimum:
+  \texttt{errcheck}, \texttt{staticcheck}, \texttt{gocritic})
+\item[$\square$]
+  Every goroutine has a documented exit condition
+\item[$\square$]
+  Every \texttt{if\ err\ !=\ nil} has a classification
+  (retry/skip/abort/alert)
+\item[$\square$]
+  All I/O functions accept \texttt{context.Context} as first parameter
+\item[$\square$]
+  No \texttt{time.Sleep} without \texttt{select}+\texttt{ctx.Done()}
+\end{itemize}
+
+\hypertarget{observability}{%
+\subsubsection{Observability}\label{observability}}
+
+\begin{itemize}
+\tightlist
+\item[$\square$]
+  \texttt{runtime.NumGoroutine()} exported as Prometheus gauge
+\item[$\square$]
+  Worker pool active workers and queue depth as Prometheus gauges
+\item[$\square$]
+  Kafka consumer lag monitored (via Kafka Exporter or manual gauge)
+\item[$\square$]
+  DB write latency as Prometheus histogram
+\item[$\square$]
+  Error rates tracked as counters with error type label
+\item[$\square$]
+  pprof endpoint on internal port (6060)
+\end{itemize}
+
+\hypertarget{deployment}{%
+\subsubsection{Deployment}\label{deployment}}
+
+\begin{itemize}
+\tightlist
+\item[$\square$]
+  All binaries: \texttt{CGO\_ENABLED=0\ GOOS=linux\ GOARCH=amd64}
+\item[$\square$]
+  \texttt{FROM\ scratch} final stage with CA certs
+\item[$\square$]
+  Version + git commit injected via \texttt{-ldflags}
+\item[$\square$]
+  \texttt{automaxprocs} imported in every binary
+\item[$\square$]
+  \texttt{GOMEMLIMIT} set to 90\% of container memory limit
+\item[$\square$]
+  \texttt{preStop:\ sleep\ 5} in all Kubernetes pod specs
+\item[$\square$]
+  \texttt{terminationGracePeriodSeconds} ≥ preStop + drainTimeout + 5s
+\end{itemize}
+
+\hypertarget{resilience}{%
+\subsubsection{Resilience}\label{resilience}}
+
+\begin{itemize}
+\tightlist
+\item[$\square$]
+  Kafka consumer reconnects with exponential backoff + jitter
+\item[$\square$]
+  WebSocket clients reconnect on disconnect (browser-side)
+\item[$\square$]
+  DB connection pool sized per replica count (not per instance)
+\item[$\square$]
+  DLQ topic for unparseable Kafka messages
+\item[$\square$]
+  \texttt{/readyz} fails until all startup checks pass
+\item[$\square$]
+  Graceful shutdown drain verified under load (no dropped requests)
+\end{itemize}
+
+\hypertarget{security}{%
+\subsubsection{Security}\label{security}}
+
+\begin{itemize}
+\tightlist
+\item[$\square$]
+  \texttt{CheckOrigin} validates WebSocket origins against allowlist
+\item[$\square$]
+  Secrets in Kubernetes Secrets, not ConfigMap
+\item[$\square$]
+  Non-root user in all Dockerfiles
+\item[$\square$]
+  pprof endpoint not exposed on public port
+\item[$\square$]
+  \texttt{/admin/log-level} endpoint not exposed on public port
+\item[$\square$]
+  Request body size limited (\texttt{http.MaxBytesReader})
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{the-last-word}{%
+\subsection{The Last Word}\label{the-last-word}}
+
+You now have a complete engineering learning system for Go distributed
+backend development. Every pattern, every decision, every tradeoff in
+these 20 chapters was motivated by a real operational concern in real
+production systems.
+
+The ARCHER platform is not a toy. The load generator patterns are used
+in production load testing tools. The telemetry pipeline patterns are
+used in observability platforms. The WebSocket hub pattern is used in
+real-time collaboration tools. The Kafka integration patterns are used
+in financial event streaming systems.
+
+Build it. Break it deliberately. Observe it with the tools you've built.
+Fix it. That cycle --- build, observe, break, fix --- repeated across
+all 19 prior components is what makes you capable of supervising,
+debugging, and extending any distributed Go system you encounter.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\emph{End of the ARCHER Backend Engineering Curriculum --- 20 chapters,
+one complete distributed systems engineering program.}
+
+\end{document}

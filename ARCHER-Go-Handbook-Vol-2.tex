@@ -1,0 +1,3292 @@
+\documentclass[11pt,a4paper,oneside]{book}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage[outputdir=.]{minted}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{calc}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{tcolorbox}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{setspace}
+
+\setminted{
+    style=tango,
+    frame=lines,
+    framesep=2mm,
+    baselinestretch=1.1,
+    bgcolor=black!5,
+    fontsize=\small,
+    breaklines=true
+}
+
+\setstretch{1.1}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.8em}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\nouppercase{\leftmark}}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries\sffamily}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{50pt}{40pt}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\sffamily}{\thesection}{1em}{}
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\sffamily}{\thesubsection}{1em}{}
+
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+\title{\Huge\bfseries ARCHER Go Engineering Handbook \\ \vspace{0.5em} \Large Volume 2: Concurrency, Worker Systems, and Go Runtime Thinking}
+\author{\Large Mayank Tripathi}
+\date{}
+
+\begin{document}
+\frontmatter
+\maketitle
+\tableofcontents
+\mainmatter
+
+
+
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\begin{quote}
+\emph{Volume 2 of 5 --- The ARCHER Go Engineering Handbook Series}
+
+\emph{A production-grade distributed systems engineering curriculum for
+backend engineers building infrastructure in Go.}
+\end{quote}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\chapter*{Preface}
+\addcontentsline{toc}{chapter}{Preface}
+
+If Volume 1 is the philosophy, Volume 2 is the machinery.
+
+The Go scheduler, goroutine lifecycle, the GMP model, stack growth,
+\texttt{GOMAXPROCS} --- these are not implementation details to be
+learned once and forgotten. They are the operational reality of every
+concurrent backend you will build. A load generator running 5000
+goroutines on a 2-CPU Kubernetes pod behaves completely differently
+depending on whether \texttt{GOMAXPROCS} is 2 or 32. A consumer loop
+that ignores goroutine backpressure becomes a memory leak. A goroutine
+that doesn't check \texttt{ctx.Done()} becomes a zombie after shutdown.
+Understanding the runtime is what separates engineers who build systems
+that stay up from those who build systems that work in demos.
+
+This volume covers the Go scheduler at depth --- the GMP model, work
+stealing, goroutine state machine, and the \texttt{automaxprocs} library
+that automatically aligns \texttt{GOMAXPROCS} with container CPU quotas.
+It then covers channels --- the complete taxonomy of patterns that make
+concurrent Go readable and correct: pipelines, fan-out, fan-in, hubs,
+semaphores, and the \texttt{select} statement as a concurrent switch.
+The worker pool chapter assembles these primitives into the
+bounded-concurrency engine at the heart of the ARCHER load generator.
+Finally, the context chapter ties everything together: Go's unified
+mechanism for propagating cancellation, deadlines, and request-scoped
+data across every goroutine, every network call, and every service
+boundary.
+
+By the end of Volume 2, you will be able to reason about goroutine
+lifecycle, channel topology, context propagation, and shutdown
+correctness for any concurrent Go system.
+
+\textbf{Chapters in this volume:}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.2333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4667}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+Chapter
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Title
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Core Concept
+\end{minipage} \\
+\midrule()
+\endhead
+05 & Goroutines and the Go Scheduler & GMP model, stack growth,
+lifecycle, \texttt{automaxprocs} \\
+06 & Channels and Communication Patterns & Pipeline, fan-out/in, hub,
+semaphore, \texttt{select}, backpressure \\
+07 & Worker Pools and Concurrent Job Systems & Bounded concurrency, rate
+limiting, telemetry, graceful drain \\
+08 & Context Package and Graceful Cancellation & Context tree, signal
+handling, propagation, shutdown contract \\
+\bottomrule()
+\end{longtable}
+
+\textbf{Companion volumes:} - \emph{Volume 1} --- Foundations of Go
+Systems Engineering (Chapters 1--4) - \emph{Volume 3} --- APIs,
+WebSockets, Kafka, and Distributed Communication (Chapters 9--12) -
+\emph{Volume 4} --- Telemetry, Infrastructure Systems, and Production
+Backend Engineering (Chapters 13--16) - \emph{Volume 5} ---
+High-Performance Distributed Architecture and ARCHER Systems Design
+(Chapters 17--20)
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Table of Contents --- Volume
+2}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\setcounter{enumi}{4}
+\tightlist
+\item
+  \protect\hyperlink{chapter-05--goroutines-and-the-go-scheduler}{Goroutines
+  and the Go Scheduler}
+\item
+  \protect\hyperlink{chapter-06--channels-and-communication-patterns}{Channels
+  and Communication Patterns}
+\item
+  \protect\hyperlink{chapter-07--worker-pools-and-concurrent-job-systems}{Worker
+  Pools and Concurrent Job Systems}
+\item
+  \protect\hyperlink{chapter-08--context-package-and-graceful-cancellation}{Context
+  Package and Graceful Cancellation}
+\end{enumerate}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{Chapter 05 --- Goroutines and the Go
+Scheduler}
+
+\begin{quote}
+\textbf{Engineering Learning Booklet \textbar{} ARCHER Backend
+Architecture Series} \emph{The runtime machinery behind Go's concurrency
+model --- and how to use it without shooting yourself in the foot.}
+\end{quote}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{1. What a Goroutine Actually
+Is}
+
+A goroutine is a function executing concurrently with other goroutines
+in the same address space. It is \textbf{not} a thread. It is a
+lightweight, cooperatively-and-preemptively scheduled execution unit
+managed by the Go runtime.
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+go func() {
+    // This runs concurrently — scheduling is the runtime's problem
+    sendRequest(ctx, target)
+}()
+\end{minted}
+
+The \texttt{go} keyword is the only primitive you need to launch a
+goroutine. The rest --- stack management, scheduling, I/O multiplexing
+--- is handled by the runtime.
+
+\subsection{Stack Growth}
+
+A goroutine starts with a \textbf{2 KB stack} that grows and shrinks
+dynamically as needed. The runtime detects when a goroutine is about to
+exceed its current stack allocation (via a stack guard check on every
+function call) and copies the stack to a larger allocation --- typically
+doubling.
+
+This means you can have hundreds of thousands of goroutines, each with a
+different stack depth, without pre-allocating thread stacks of 1--8 MB.
+For a WebSocket service handling 100k concurrent connections, this is
+the difference between 200 MB and 100 GB of memory.
+
+\textbf{Implication for recursive algorithms:} Deep recursion in a
+goroutine is safe but causes repeated stack growth. In a load
+generator's hot path, prefer iteration to recursion to avoid stack
+copying overhead.
+
+\subsection{The Goroutine ID}
+
+Goroutines have no exported ID visible to application code. This is
+intentional --- it prevents goroutine-local storage anti-patterns
+(thread-local storage was Go's explicit ``never again''). Use
+\texttt{context.Context} to propagate request-scoped state. This was
+established in Chapter 1 and becomes critical in Chapters 5 and 8.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{2. The Go Scheduler --- GMP
+Model}
+
+The Go scheduler uses the \textbf{GMP model}:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{text}
+G — Goroutine (the unit of concurrent execution)
+M — Machine (OS thread)
+P — Processor (logical CPU, holds run queue)
+\end{minted}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{text}
+┌──────────────────────────────────────────────────┐
+│                   Go Runtime                     │
+│                                                  │
+│  P0 [run queue: G1, G2, G3] ←→ M0 (OS thread)  │
+│  P1 [run queue: G4, G5]     ←→ M1 (OS thread)  │
+│  P2 [run queue: G6]         ←→ M2 (OS thread)  │
+│  P3 [run queue: empty]      ←→ M3 (OS thread)  │
+│                                                  │
+│  Global run queue: [G7, G8, G9]                 │
+└──────────────────────────────────────────────────┘
+\end{minted}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{\texttt{GOMAXPROCS}} sets the number of Ps (default: number of
+  CPU cores)
+\item
+  Each P has a local run queue of goroutines (up to 256)
+\item
+  When a P's local queue is empty, it \textbf{work-steals} from another
+  P
+\item
+  An M executes one G at a time on one P
+\end{itemize}
+
+\subsection{Preemption}
+
+Before Go 1.14, goroutines were only preempted at function call sites
+(cooperative preemption). A tight CPU loop could starve other
+goroutines:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// Pre-1.14: could starve other goroutines on the same P
+func busySpin() {
+    for {
+        // No function calls → no preemption point
+    }
+}
+\end{minted}
+
+From \textbf{Go 1.14+}, the runtime uses \textbf{asynchronous
+preemption} via signals (SIGURG). A goroutine running a tight loop can
+be preempted mid-instruction. Production Go code from 1.14+ is safe from
+this starvation bug.
+
+\subsubsection{2.2 Blocking and OS Thread
+Handoff}
+
+When a goroutine blocks on a \textbf{syscall} (file I/O, certain cgo
+calls), the Go runtime \textbf{detaches the M from the P} and lets the P
+run other goroutines:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{text}
+Goroutine calls syscall:
+1. M detaches from P (P is now free)
+2. P is picked up by another M (possibly a new one)
+3. P continues running other goroutines
+4. When syscall completes: M tries to reacquire a P
+   - If a P is available: resume goroutine on that P
+   - If no P available: goroutine goes to global run queue; M goes to sleep
+\end{minted}
+
+For \textbf{network I/O} (TCP reads, HTTP requests), Go uses the
+\textbf{netpoller} --- a non-blocking I/O multiplexer built on
+\texttt{epoll} (Linux) or \texttt{kqueue} (macOS). Network-blocked
+goroutines park without occupying an OS thread at all.
+
+This is why a Go HTTP server can handle 100k concurrent connections
+without 100k threads --- 99k goroutines are parked in the netpoller, and
+only a handful of OS threads serve the P's run queues.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{\texorpdfstring{3. \texttt{GOMAXPROCS} in
+Production}{3. GOMAXPROCS in Production}}
+
+\texttt{GOMAXPROCS} must match the \textbf{container's CPU limit}, not
+the host machine's CPUs. A container limited to 2 CPUs running on a
+64-core host will create 64 Ps, but only 2 will ever run --- the other
+62 burn CPU trying to run goroutines that get throttled by the kernel.
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// Use the automaxprocs library — reads CPU quota from cgroups
+import _ "go.uber.org/automaxprocs"
+
+// Placed in main() — automatically sets GOMAXPROCS to container CPU limit
+\end{minted}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{docker}
+# Kubernetes resource limits example
+resources:
+  limits:
+    cpu: "2"
+  requests:
+    cpu: "1"
+\end{minted}
+
+Without \texttt{automaxprocs}, a Go service in Kubernetes with a 2-CPU
+limit but running on a 32-core node will set \texttt{GOMAXPROCS=32},
+creating 32 OS threads competing for 2 CPUs --- a scheduling performance
+regression.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{4. Goroutine Lifecycle
+Management}
+
+The most common production mistake: \textbf{goroutine leaks}. A
+goroutine that is started but never exits accumulates memory and CPU,
+and is invisible unless you instrument it.
+
+\subsubsection{4.1 The Goroutine Leak
+Pattern}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// LEAK: this goroutine runs forever, no exit condition
+func startWorker(jobs <-chan Job) {
+    go func() {
+        for job := range jobs {
+            process(job)
+        }
+        // Only exits if jobs channel is closed — what if it never is?
+    }()
+}
+
+// LEAK: blocks forever waiting for a channel that nobody writes to
+func subscribe(events <-chan Event) {
+    go func() {
+        for e := range events { // blocks if producer dies without closing
+            handle(e)
+        }
+    }()
+}
+\end{minted}
+
+\subsubsection{4.2 The Correct Pattern --- Context-Driven
+Lifecycle}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+func startWorker(ctx context.Context, jobs <-chan Job) {
+    go func() {
+        for {
+            select {
+            case <-ctx.Done():
+                return // clean exit when context cancelled
+            case job, ok := <-jobs:
+                if !ok {
+                    return // channel closed — exit
+                }
+                process(ctx, job)
+            }
+        }
+    }()
+}
+\end{minted}
+
+Every goroutine must have a documented, reachable exit condition: 1.
+Channel closed 2. Context cancelled 3. Return from function (for
+goroutines in a \texttt{for} loop that terminates)
+
+\subsubsection{4.3 Tracking Goroutines in
+Production}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// Expose goroutine count as a metric
+func goroutineMetricLoop(ctx context.Context, gauge prometheus.Gauge) {
+    ticker := time.NewTicker(10 * time.Second)
+    defer ticker.Stop()
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-ticker.C:
+            gauge.Set(float64(runtime.NumGoroutine()))
+        }
+    }
+}
+\end{minted}
+
+A rising \texttt{runtime.NumGoroutine()} over time (visible in Grafana)
+is the canonical signal of a goroutine leak. Alert on it.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{\texorpdfstring{5. \texttt{sync.WaitGroup} --- Lifecycle
+Coordination}{5. sync.WaitGroup --- Lifecycle Coordination}}
+
+\texttt{WaitGroup} is the primitive for ``start N goroutines, wait for
+all to finish'':
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+func runLoadBatch(ctx context.Context, jobs []Job, concurrency int) []Result {
+    results := make([]Result, 0, len(jobs))
+    resultCh := make(chan Result, len(jobs))
+
+    sem := make(chan struct{}, concurrency)
+    var wg sync.WaitGroup
+
+    for _, job := range jobs {
+        job := job
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            sem <- struct{}{}         // acquire slot
+            defer func() { <-sem }() // release slot
+            resultCh <- job.Execute(ctx)
+        }()
+    }
+
+    // Close resultCh once all goroutines finish
+    go func() {
+        wg.Wait()
+        close(resultCh)
+    }()
+
+    for r := range resultCh {
+        results = append(results, r)
+    }
+    return results
+}
+\end{minted}
+
+\textbf{\texttt{wg.Add(1)} before \texttt{go\ func()}} --- never inside
+the goroutine. If the goroutine is scheduled late, \texttt{wg.Wait()}
+might return before \texttt{Add} is called, causing a race on the
+counter.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{\texorpdfstring{6. \texttt{sync.Once} --- Initialization
+Safety}{6. sync.Once --- Initialization Safety}}
+
+For one-time initialization in a concurrent system (connecting to a
+database, loading a config):
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+type SchemaInitializer struct {
+    db   *sql.DB
+    once sync.Once
+    err  error
+}
+
+func (s *SchemaInitializer) Init(ctx context.Context) error {
+    s.once.Do(func() {
+        s.err = s.runMigrations(ctx)
+    })
+    return s.err
+}
+\end{minted}
+
+\texttt{sync.Once.Do} guarantees the function runs exactly once, even
+under concurrent callers. If the first call panics, the function is
+\textbf{not} retried --- the \texttt{Once} is considered ``done.'' For
+retryable initialization, use a mutex and a boolean flag instead.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{7. Goroutine Patterns for
+ARCHER}
+
+\subsubsection{7.1 The Supervisor
+Pattern}
+
+A supervisor goroutine restarts crashed child goroutines:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+func supervise(ctx context.Context, name string, fn func(context.Context) error, logger *zap.Logger) {
+    go func() {
+        for {
+            if err := fn(ctx); err != nil {
+                if ctx.Err() != nil {
+                    return // shutdown — don't restart
+                }
+                logger.Error("worker crashed, restarting",
+                    zap.String("worker", name),
+                    zap.Error(err),
+                )
+                select {
+                case <-time.After(2 * time.Second): // backoff before restart
+                case <-ctx.Done():
+                    return
+                }
+                continue
+            }
+            return // clean exit (fn returned nil) — don't restart
+        }
+    }()
+}
+
+// Usage in main:
+supervise(ctx, "kafka-consumer", consumer.Run, logger)
+supervise(ctx, "telemetry-pipeline", pipeline.Run, logger)
+supervise(ctx, "websocket-hub", hub.Run, logger)
+\end{minted}
+
+This pattern keeps ARCHER services alive across transient failures
+without crashing the entire process.
+
+\subsubsection{7.2 The Fan-Out Pattern (Load Generator
+Core)}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// Distribute N jobs across concurrency workers
+func fanOut(ctx context.Context, concurrency int, jobs []Job) <-chan Result {
+    results := make(chan Result, len(jobs))
+    jobCh := make(chan Job, len(jobs))
+
+    // Feed jobs
+    go func() {
+        defer close(jobCh)
+        for _, j := range jobs {
+            select {
+            case <-ctx.Done():
+                return
+            case jobCh <- j:
+            }
+        }
+    }()
+
+    // Workers
+    var wg sync.WaitGroup
+    for i := 0; i < concurrency; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for job := range jobCh {
+                results <- job.Execute(ctx)
+            }
+        }()
+    }
+
+    // Close results when all workers done
+    go func() {
+        wg.Wait()
+        close(results)
+    }()
+
+    return results
+}
+\end{minted}
+
+\subsubsection{7.3 The Background Ticker Pattern (Telemetry
+Flush)}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+func (p *Pipeline) runFlushLoop(ctx context.Context) {
+    ticker := time.NewTicker(p.flushInterval)
+    defer ticker.Stop()
+
+    for {
+        select {
+        case <-ctx.Done():
+            // Final flush before shutdown
+            if err := p.flush(context.Background()); err != nil {
+                p.logger.Error("final flush failed", zap.Error(err))
+            }
+            return
+        case <-ticker.C:
+            if err := p.flush(ctx); err != nil {
+                p.logger.Error("periodic flush failed", zap.Error(err))
+                // Don't return — continue trying on next tick
+            }
+        }
+    }
+}
+\end{minted}
+
+The \texttt{context.Background()} in the final flush is intentional ---
+the parent \texttt{ctx} is already cancelled at shutdown. You still want
+the final flush to complete.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{Goroutine Anti-Patterns}
+
+\subsubsection{\texorpdfstring{8.1 Goroutines in \texttt{init()} or
+Package-Level
+\texttt{var}}{8.1 Goroutines in init() or Package-Level var}}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// NEVER DO THIS — goroutine with no shutdown mechanism, no context
+var _ = func() bool {
+    go backgroundWorker() // no way to stop this
+    return true
+}()
+\end{minted}
+
+Package-level goroutines are leaked by design --- there is no context to
+cancel them and no \texttt{WaitGroup} to track them. All goroutines must
+be started from \texttt{main()} or from a struct with an explicit
+lifecycle.
+
+\subsubsection{\texorpdfstring{8.2 Passing \texttt{sync.WaitGroup} by
+Value}{8.2 Passing sync.WaitGroup by Value}}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// BUG: wg is copied — Done() on the copy doesn't affect the original
+func badWorker(wg sync.WaitGroup) { // copy!
+    defer wg.Done()
+}
+
+// CORRECT: pass by pointer
+func goodWorker(wg *sync.WaitGroup) {
+    defer wg.Done()
+}
+\end{minted}
+
+\subsubsection{\texorpdfstring{8.3 \texttt{time.Sleep} Without
+Context}{8.3 time.Sleep Without Context}}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// BAD: cannot be cancelled during shutdown
+time.Sleep(5 * time.Second)
+
+// GOOD: cancellable sleep
+select {
+case <-time.After(5 * time.Second):
+    // continue
+case <-ctx.Done():
+    return ctx.Err()
+}
+\end{minted}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{9. Debugging Goroutine
+Issues}
+
+\subsubsection{\texorpdfstring{9.1 \texttt{runtime/pprof} Goroutine
+Dump}{9.1 runtime/pprof Goroutine Dump}}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// Add a pprof endpoint to every ARCHER service
+import _ "net/http/pprof"
+
+// In a separate goroutine:
+go http.ListenAndServe(":6060", nil)
+\end{minted}
+
+Then: \texttt{curl\ http://localhost:6060/debug/pprof/goroutine?debug=2}
+
+This dumps every goroutine's stack trace --- invaluable for diagnosing
+leaks. In production, expose this on an internal port only.
+
+\subsubsection{\texorpdfstring{9.2
+\texttt{go\ test\ -race}}{9.2 go test -race}}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{bash}
+go test -race ./...
+\end{minted}
+
+The race detector instruments memory accesses at compile time. It
+detects concurrent reads and writes to shared state without
+synchronization. Run this in CI on every push. A data race in production
+is undefined behavior.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Key Takeaways}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Goroutines are \textasciitilde2KB, not \textasciitilde1MB.}
+  Spawn per-request, per-connection, per-job.
+\item
+  \textbf{GMP model:} G goroutines on M OS threads, scheduled by P
+  processors.
+\item
+  \textbf{\texttt{GOMAXPROCS} must match container CPU limits} --- use
+  \texttt{automaxprocs}.
+\item
+  \textbf{Every goroutine needs a documented exit condition} ---
+  context, channel close, or function return.
+\item
+  \textbf{\texttt{sync.WaitGroup}} for lifecycle; \textbf{supervisor
+  pattern} for resilience; \textbf{\texttt{sync.Once}} for
+  initialization.
+\item
+  \textbf{Goroutine leaks are invisible without instrumentation} ---
+  track \texttt{runtime.NumGoroutine()}.
+\item
+  \textbf{\texttt{time.Sleep} in a goroutine must use \texttt{select}
+  with \texttt{ctx.Done()}} for cancellability.
+\end{enumerate}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Common Production
+Pitfalls}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+Pitfall
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Consequence
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Correct Approach
+\end{minipage} \\
+\midrule()
+\endhead
+Goroutine with no exit condition & Memory grows unbounded & Always have
+a \texttt{ctx.Done()} or channel close exit \\
+\texttt{GOMAXPROCS} not tuned for containers & CPU scheduling
+inefficiency & Use \texttt{automaxprocs} in every service \\
+\texttt{wg.Add(1)} inside the goroutine & Race on WaitGroup counter &
+Always \texttt{Add} before \texttt{go\ func()} \\
+\texttt{sync.WaitGroup} passed by value & \texttt{Done()} doesn't
+decrement original counter & Always pass by pointer \\
+Tight CPU loop without function calls (pre-1.14) & Goroutine starvation
+& Ensure Go 1.14+; add \texttt{runtime.Gosched()} if needed \\
+Package-level goroutine in \texttt{init()} & Unstoppable goroutine & All
+goroutines from \texttt{main()} with explicit lifecycle \\
+\texttt{time.Sleep} without \texttt{select} & Ignores shutdown signals &
+Use \texttt{select} with \texttt{time.After} and \texttt{ctx.Done()} \\
+\bottomrule()
+\end{longtable}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Production Checklist}
+
+\begin{itemize}
+\tightlist
+\item[$\square$]
+  \texttt{go.uber.org/automaxprocs} imported in every binary's
+  \texttt{main.go}
+\item[$\square$]
+  All goroutines have documented exit conditions
+\item[$\square$]
+  \texttt{runtime.NumGoroutine()} exposed as a Prometheus gauge
+\item[$\square$]
+  Supervisor pattern for all long-running service goroutines
+\item[$\square$]
+  \texttt{wg.Add(1)} always called before \texttt{go\ func()}
+\item[$\square$]
+  \texttt{go\ test\ -race\ ./...} passes in CI
+\item[$\square$]
+  pprof endpoint on internal port for goroutine dump access
+\item[$\square$]
+  No \texttt{time.Sleep} in goroutines --- replaced with
+  \texttt{select}/\texttt{ctx.Done()}
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Mini Backend Exercise}
+
+\textbf{Task:} Build a goroutine-safe rate limiter: 1. A struct with an
+internal token bucket (refilled every 100ms via a background goroutine)
+2. \texttt{Acquire(ctx\ context.Context)\ error} --- blocks until a
+token is available or ctx is cancelled 3. \texttt{Stop()} --- shuts down
+the background refill goroutine cleanly 4. Verify with
+\texttt{go\ test\ -race} that there are no data races
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Concurrency Exercise}
+
+\textbf{Task:} Implement the fan-out pattern from §7.2 with a twist: 1.
+If any job returns an error, cancel the context for all remaining jobs
+2. Collect all results (including partial ones before cancellation) 3.
+Return the first error encountered alongside all collected results 4.
+Verify with race detector
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{How This Maps to the ARCHER
+Architecture}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+ARCHER Component
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Goroutine Pattern
+\end{minipage} \\
+\midrule()
+\endhead
+Load Generator & Fan-out (§7.2) with concurrency-limited workers \\
+Telemetry Pipeline & Background ticker (§7.3) with final flush on
+shutdown \\
+Kafka Consumer & Supervisor pattern (§7.1) for restart-on-crash \\
+WebSocket Hub & One goroutine per client (reader + writer goroutines) \\
+Worker Orchestrator & WaitGroup + semaphore for bounded concurrency \\
+API Server & One goroutine per HTTP request (stdlib manages this) \\
+\bottomrule()
+\end{longtable}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{What Actually Matters for the
+Hackathon}
+
+\begin{itemize}
+\tightlist
+\item
+  Use \texttt{automaxprocs} --- 5 seconds of work, measurable
+  performance impact in Docker
+\item
+  Add \texttt{runtime.NumGoroutine()} to your metrics --- first line of
+  defense for leak detection
+\item
+  The supervisor pattern keeps ARCHER running without manual restarts
+  during demos
+\item
+  Every goroutine must exit on \texttt{ctx.Done()} --- non-negotiable
+  for clean \texttt{SIGTERM} handling
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{What Can Be Ignored for
+Now}
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{GODEBUG=schedtrace=1000} scheduler tracing --- for deep
+  scheduler debugging only
+\item
+  Goroutine affinity / pinning --- not exposed in Go; handled by the
+  runtime
+\item
+  \texttt{runtime.LockOSThread()} --- only for cgo interop and
+  OS-thread-specific syscalls
+\item
+  Green thread vs coroutine academic distinctions --- practically
+  irrelevant for ARCHER
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\emph{Next chapter: Channels and Communication Patterns --- the
+primitives that connect goroutines into a distributed system within a
+process.}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{Chapter 06 --- Channels and Communication
+Patterns}
+
+\begin{quote}
+\textbf{Engineering Learning Booklet \textbar{} ARCHER Backend
+Architecture Series} \emph{Channels are not just queues --- they are the
+synchronization, ownership transfer, and coordination primitive of Go's
+concurrency model.}
+\end{quote}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{1. What Channels Actually
+Are}
+
+A channel is a typed, goroutine-safe conduit for sending values between
+goroutines. It provides both \textbf{data transfer} and
+\textbf{synchronization} in a single primitive.
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+ch := make(chan MetricEvent)       // unbuffered
+ch := make(chan MetricEvent, 1000) // buffered, capacity 1000
+\end{minted}
+
+Channels have direction --- and direction matters architecturally:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+func producer(out chan<- MetricEvent) { out <- event }  // send-only
+func consumer(in <-chan MetricEvent)  { event := <-in } // receive-only
+func pipe(in <-chan MetricEvent, out chan<- MetricEvent) // both
+\end{minted}
+
+Directional channel types are enforced by the compiler. Passing
+\texttt{chan\textless{}-} to a consumer guarantees it can never close
+the channel from the wrong end or read from it --- this is compile-time
+API contract enforcement.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{2. Buffered vs Unbuffered --- The Design
+Decision}
+
+\subsubsection{2.1 Unbuffered Channels --- Synchronous
+Rendezvous}
+
+An unbuffered channel (\texttt{make(chan\ T)}) blocks the sender until a
+receiver is ready, and blocks the receiver until a sender is ready. Both
+goroutines synchronize at the exchange point.
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+sync := make(chan struct{})
+
+go func() {
+    doWork()
+    sync <- struct{}{} // blocks until main receives
+}()
+
+<-sync // blocks until goroutine sends
+fmt.Println("work done")
+\end{minted}
+
+Use unbuffered channels when you need \textbf{guaranteed handoff} ---
+the sender must know the receiver has taken the value before continuing.
+This is the right model for signal passing (done signals, shutdown
+notifications) and pipeline stages where backpressure must propagate
+upstream.
+
+\subsubsection{2.2 Buffered Channels --- Decoupling Producer and
+Consumer
+Speed}
+
+A buffered channel allows the sender to continue up to \texttt{cap}
+sends without a receiver ready. Only when the buffer is full does the
+sender block.
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+events := make(chan MetricEvent, 1000)
+
+// Producer can send up to 1000 events without blocking
+go func() {
+    for _, e := range batch {
+        events <- e // only blocks if 1000 events are pending
+    }
+    close(events)
+}()
+
+// Consumer processes at its own pace
+for e := range events {
+    store.Save(ctx, e)
+}
+\end{minted}
+
+\textbf{Buffer sizing is a capacity decision, not a correctness
+decision.} A buffer of zero is functionally correct --- the producer
+will just block more often. Buffer size is a performance and decoupling
+tuning parameter.
+
+For ARCHER's telemetry pipeline: - Buffer too small → producer (load
+generator) blocks, throughput drops - Buffer too large → memory grows
+under load spike, crash risk - Buffer correctly sized → absorbs burst
+while keeping average consumer speed
+
+\subsection{How to Size Buffers}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{text}
+Buffer = Peak Burst Rate × Expected Processing Lag
+\end{minted}
+
+For a telemetry pipeline expecting 10k events/second bursts and a
+consumer processing lag of 200ms:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{text}
+Buffer = 10,000 events/s × 0.2s = 2,000 events
+\end{minted}
+
+Round up to the next power of two:
+\texttt{make(chan\ MetricEvent,\ 2048)}
+
+Monitor channel backpressure with \texttt{len(ch)} --- expose it as a
+gauge metric. If \texttt{len(ch)} consistently approaches
+\texttt{cap(ch)}, your consumer is too slow or your buffer is too small.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{3. Channel Closing and
+Range}
+
+\textbf{Only the sender closes a channel.} The receiver never closes.
+Closing from the receiver side panics.
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// Correct pattern: sender closes
+func produce(out chan<- Job, jobs []Job) {
+    defer close(out) // closed when function returns
+    for _, j := range jobs {
+        out <- j
+    }
+}
+
+// Receiver uses range — exits when channel is closed
+func consume(in <-chan Job) {
+    for job := range in { // range exits when in is closed and drained
+        process(job)
+    }
+}
+\end{minted}
+
+\textbf{The zero value on a closed channel:} Receiving from a closed
+channel immediately returns the zero value for the type and
+\texttt{false}:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+val, ok := <-ch
+if !ok {
+    // channel closed and drained
+    return
+}
+\end{minted}
+
+\textbf{Sending to a closed channel panics.} This is a programming
+error, not an operational error. Design your goroutine lifecycle so the
+sender is always the one who closes.
+
+\subsubsection{3.1 The Multiple-Producer Close
+Problem}
+
+When multiple goroutines send to the same channel, only one can close
+it. Use a \texttt{sync.WaitGroup} to know when all producers are done:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+func multiProducer(out chan<- MetricEvent, sources []EventSource) {
+    var wg sync.WaitGroup
+    for _, src := range sources {
+        src := src
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for _, e := range src.Events() {
+                out <- e
+            }
+        }()
+    }
+    // Separate goroutine closes after all producers finish
+    go func() {
+        wg.Wait()
+        close(out)
+    }()
+}
+\end{minted}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{\texorpdfstring{4. \texttt{select} --- Multiplexing
+Channels}{4. select --- Multiplexing Channels}}
+
+\texttt{select} is Go's mechanism for waiting on multiple channel
+operations simultaneously. It is the heart of concurrent Go programs.
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+select {
+case msg := <-kafkaIn:
+    // received a Kafka message
+case result := <-workerOut:
+    // received a worker result
+case <-ticker.C:
+    // periodic flush
+case <-ctx.Done():
+    // shutdown signal
+}
+\end{minted}
+
+If multiple cases are ready simultaneously, \texttt{select} picks one
+\textbf{uniformly at random}. This prevents starvation in pipelines
+where one channel is always busy.
+
+\subsubsection{4.1 Non-Blocking Channel
+Operations}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// Try to send without blocking
+select {
+case resultCh <- result:
+    // sent
+default:
+    // channel full — drop or handle backpressure
+    metrics.DroppedResults.Inc()
+}
+
+// Try to receive without blocking
+select {
+case job := <-jobCh:
+    process(job)
+default:
+    // no job ready — idle
+}
+\end{minted}
+
+Use default sparingly. In most pipelines, blocking on a full channel is
+\textbf{intentional backpressure} --- the default case bypasses it.
+
+\subsubsection{4.2 Timeout on Channel
+Operations}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+select {
+case result := <-resultCh:
+    return result, nil
+case <-time.After(5 * time.Second):
+    return Result{}, fmt.Errorf("worker timeout after 5s")
+case <-ctx.Done():
+    return Result{}, ctx.Err()
+}
+\end{minted}
+
+\textbf{Note:} \texttt{time.After} allocates a new timer on every call
+and leaks it until it fires. In high-throughput hot paths, use
+\texttt{time.NewTimer} and reset it:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+timer := time.NewTimer(5 * time.Second)
+defer timer.Stop()
+select {
+case result := <-resultCh:
+    return result, nil
+case <-timer.C:
+    return Result{}, fmt.Errorf("timeout")
+case <-ctx.Done():
+    return Result{}, ctx.Err()
+}
+\end{minted}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{5. Core Communication
+Patterns}
+
+\subsection{Pipeline Pattern}
+
+Data flows through a series of transformation stages, each connected by
+channels:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// Stage 1: read raw bytes from Kafka
+func readKafka(ctx context.Context, reader *kafka.Reader) <-chan []byte {
+    out := make(chan []byte, 256)
+    go func() {
+        defer close(out)
+        for {
+            msg, err := reader.ReadMessage(ctx)
+            if err != nil {
+                if ctx.Err() != nil {
+                    return
+                }
+                continue
+            }
+            select {
+            case out <- msg.Value:
+            case <-ctx.Done():
+                return
+            }
+        }
+    }()
+    return out
+}
+
+// Stage 2: parse raw bytes into events
+func parseEvents(ctx context.Context, raw <-chan []byte) <-chan MetricEvent {
+    out := make(chan MetricEvent, 256)
+    go func() {
+        defer close(out)
+        for bytes := range raw {
+            var e MetricEvent
+            if err := json.Unmarshal(bytes, &e); err != nil {
+                continue // skip malformed
+            }
+            select {
+            case out <- e:
+            case <-ctx.Done():
+                return
+            }
+        }
+    }()
+    return out
+}
+
+// Stage 3: store events
+func storeEvents(ctx context.Context, events <-chan MetricEvent, store MetricStore) {
+    for e := range events {
+        if err := store.Save(ctx, e); err != nil {
+            log.Error("store failed", zap.Error(err))
+        }
+    }
+}
+
+// Assembly in main:
+raw := readKafka(ctx, reader)
+events := parseEvents(ctx, raw)
+storeEvents(ctx, events, metricStore)
+\end{minted}
+
+Each stage is independent, testable, and can be replaced. Closing the
+first channel propagates shutdown through the entire pipeline naturally.
+
+\subsection{Fan-Out Pattern}
+
+One channel distributing work to N workers:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+func fanOut(ctx context.Context, in <-chan Job, workers int) []<-chan Result {
+    outputs := make([]<-chan Result, workers)
+    for i := 0; i < workers; i++ {
+        out := make(chan Result, 64)
+        outputs[i] = out
+        go func(out chan<- Result) {
+            defer close(out)
+            for job := range in {
+                select {
+                case out <- job.Execute(ctx):
+                case <-ctx.Done():
+                    return
+                }
+            }
+        }(out)
+    }
+    return outputs
+}
+\end{minted}
+
+\subsection{Fan-In Pattern (Merge)}
+
+Merge N channels into one:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+func fanIn(ctx context.Context, channels ...<-chan Result) <-chan Result {
+    merged := make(chan Result, 256)
+    var wg sync.WaitGroup
+
+    pipe := func(ch <-chan Result) {
+        defer wg.Done()
+        for result := range ch {
+            select {
+            case merged <- result:
+            case <-ctx.Done():
+                return
+            }
+        }
+    }
+
+    wg.Add(len(channels))
+    for _, ch := range channels {
+        go pipe(ch)
+    }
+
+    go func() {
+        wg.Wait()
+        close(merged)
+    }()
+
+    return merged
+}
+
+// Combined: fan-out to 10 workers, fan-in results
+outputs := fanOut(ctx, jobCh, 10)
+results := fanIn(ctx, outputs...)
+for r := range results {
+    aggregate(r)
+}
+\end{minted}
+
+\subsubsection{5.4 Done Channel Pattern (Broadcast
+Shutdown)}
+
+A single close broadcasts shutdown to N goroutines simultaneously:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// Close a done channel to signal all listeners
+done := make(chan struct{})
+
+// All workers listen on the same done channel
+for i := 0; i < 100; i++ {
+    go func() {
+        select {
+        case <-done:
+            return // all 100 goroutines exit simultaneously
+        case job := <-jobCh:
+            process(job)
+        }
+    }()
+}
+
+// Broadcast shutdown to all 100 goroutines at once
+close(done)
+\end{minted}
+
+Unlike sending a value (which wakes only one receiver), \textbf{closing
+a channel wakes all receivers simultaneously}. This is the canonical Go
+broadcast signal.
+
+\texttt{context.Context.Done()} returns a channel that is closed on
+cancellation --- it is this exact pattern used throughout the standard
+library.
+
+\subsubsection{5.5 Semaphore Pattern (Bounded
+Concurrency)}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// Limit concurrent HTTP requests to 50
+sem := make(chan struct{}, 50)
+
+for _, url := range urls {
+    url := url
+    sem <- struct{}{} // acquire (blocks when 50 in-flight)
+    go func() {
+        defer func() { <-sem }() // release
+        sendRequest(ctx, url)
+    }()
+}
+\end{minted}
+
+The buffered channel acts as a counting semaphore --- a fundamentally
+useful pattern for rate limiting and resource bounding in load
+generators.
+
+\subsection{The Or-Done Pattern}
+
+Wrap any channel to respect context cancellation:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// orDone wraps a channel to exit when ctx is done
+func orDone[T any](ctx context.Context, ch <-chan T) <-chan T {
+    out := make(chan T)
+    go func() {
+        defer close(out)
+        for {
+            select {
+            case <-ctx.Done():
+                return
+            case v, ok := <-ch:
+                if !ok {
+                    return
+                }
+                select {
+                case out <- v:
+                case <-ctx.Done():
+                    return
+                }
+            }
+        }
+    }()
+    return out
+}
+
+// Now you can range over any channel safely with context
+for event := range orDone(ctx, kafkaEvents) {
+    process(event)
+}
+\end{minted}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{6. The WebSocket Hub
+Pattern}
+
+The WebSocket hub is the canonical channel-based broadcast architecture
+in Go. Each client has a goroutine for reading and one for writing. The
+hub owns the subscriber map and receives broadcast requests via a
+channel.
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+type Hub struct {
+    clients    map[*Client]bool
+    broadcast  chan []byte
+    register   chan *Client
+    unregister chan *Client
+}
+
+func NewHub() *Hub {
+    return &Hub{
+        broadcast:  make(chan []byte, 256),
+        register:   make(chan *Client),
+        unregister: make(chan *Client),
+        clients:    make(map[*Client]bool),
+    }
+}
+
+// Run owns the clients map — no mutex needed
+func (h *Hub) Run(ctx context.Context) {
+    for {
+        select {
+        case <-ctx.Done():
+            for client := range h.clients {
+                close(client.send)
+            }
+            return
+
+        case client := <-h.register:
+            h.clients[client] = true
+
+        case client := <-h.unregister:
+            if _, ok := h.clients[client]; ok {
+                delete(h.clients, client)
+                close(client.send)
+            }
+
+        case message := <-h.broadcast:
+            for client := range h.clients {
+                select {
+                case client.send <- message:
+                default:
+                    // Client's send buffer full — drop and unregister
+                    delete(h.clients, client)
+                    close(client.send)
+                }
+            }
+        }
+    }
+}
+\end{minted}
+
+The hub goroutine \textbf{exclusively owns} the \texttt{clients} map ---
+it is only ever accessed in the \texttt{select} arms. No mutex is needed
+because no other goroutine touches \texttt{clients}. This is the CSP
+ownership model from Chapter 1 at production scale.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{Channel Anti-Patterns}
+
+\subsubsection{7.1 Leaking Goroutines via Abandoned
+Channels}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// LEAK: nobody reads from resultCh after the function returns
+func startJobs(jobs []Job) {
+    resultCh := make(chan Result)
+    for _, j := range jobs {
+        go func(j Job) { resultCh <- j.Execute(ctx) }(j) // all block forever
+    }
+    // function returns — resultCh is abandoned, goroutines blocked forever
+}
+
+// FIX: buffer or guarantee a receiver
+resultCh := make(chan Result, len(jobs)) // buffered — goroutines never block
+\end{minted}
+
+\subsubsection{7.2 Closing a Nil Channel
+(Panic)}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+var ch chan struct{} // nil channel
+close(ch)           // panic: close of nil channel
+
+// Always initialize before use
+ch = make(chan struct{})
+\end{minted}
+
+Sending to or receiving from a nil channel blocks forever --- not a
+panic, but a deadlock. Closing a nil channel is a panic.
+
+\subsubsection{\texorpdfstring{7.3 Receiving from a Closed Channel
+Without Checking
+\texttt{ok}}{7.3 Receiving from a Closed Channel Without Checking ok}}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// Silently processes zero values after channel is closed
+for {
+    val := <-ch // returns zero value forever when ch is closed
+    process(val)
+}
+
+// Correct:
+for val := range ch { // exits when closed and drained
+    process(val)
+}
+\end{minted}
+
+\subsubsection{7.4 Using Channels Where Mutexes Are
+Simpler}
+
+Channels are not a replacement for all synchronization. For simple
+shared counters, \texttt{sync/atomic} is cleaner and faster:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// Overkill — a goroutine and channel for a counter
+counterCh := make(chan int, 1)
+counterCh <- 0
+go func() { /* manages counter via channel */ }()
+
+// Correct tool for the job
+var counter atomic.Int64
+counter.Add(1)
+n := counter.Load()
+\end{minted}
+
+Use channels for \textbf{goroutine coordination and data transfer}. Use
+mutexes and atomics for \textbf{shared state protection}.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{8. Channel Performance
+Characteristics}
+
+\begin{longtable}[]{@{}ll@{}}
+\toprule()
+Operation & Approximate Cost \\
+\midrule()
+\endhead
+Unbuffered channel send/recv (synchronized) & \textasciitilde200--300
+ns \\
+Buffered channel send (not full) & \textasciitilde50--100 ns \\
+Buffered channel recv (not empty) & \textasciitilde50--100 ns \\
+\texttt{sync/atomic} read/write & \textasciitilde5--20 ns \\
+\texttt{sync.Mutex} Lock/Unlock (uncontended) & \textasciitilde20--50
+ns \\
+\bottomrule()
+\end{longtable}
+
+For a telemetry pipeline processing 100k events/second, channel overhead
+is \textasciitilde10ms of latency budget per 100k sends --- negligible.
+For a hot inner loop doing millions of operations/second, prefer
+atomics.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Key Takeaways}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Channels transfer ownership} --- the sender owns the value
+  until it sends, the receiver owns it after.
+\item
+  \textbf{Only senders close channels} --- receivers never close; they
+  check \texttt{ok} or use \texttt{range}.
+\item
+  \textbf{Closing broadcasts shutdown} --- one \texttt{close(done)}
+  wakes all goroutines blocked on \texttt{\textless{}-done}.
+\item
+  \textbf{Buffer size is a performance tuning decision}, not a
+  correctness decision.
+\item
+  \textbf{Pipeline, fan-out, fan-in, semaphore} are the four load
+  generator patterns in ARCHER.
+\item
+  \textbf{The Hub pattern} (single goroutine owns mutable state,
+  channels carry messages) eliminates mutexes on complex shared state.
+\item
+  \textbf{Channels for coordination; atomics/mutexes for shared state}
+  --- use the right tool.
+\end{enumerate}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Common Production
+Pitfalls}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+Pitfall
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Consequence
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Correct Approach
+\end{minipage} \\
+\midrule()
+\endhead
+Goroutine blocked on send to full buffered channel & Goroutine leak &
+Size buffer correctly; use \texttt{select} + \texttt{default} for
+optional sends \\
+Closing channel from receiver & Panic & Only sender closes \\
+Nil channel operations & Deadlock (send/recv) or panic (close) & Always
+initialize; guard nil checks \\
+Receiving without \texttt{ok} from closed channel & Infinite loop on
+zero values & Use \texttt{range} or check \texttt{ok} \\
+\texttt{time.After} in hot \texttt{select} loops & Timer leak and
+allocation pressure & Use \texttt{time.NewTimer} with \texttt{Stop()}
+and \texttt{Reset()} \\
+Channel as mutex replacement for simple counters & Goroutine overhead
+for no benefit & Use \texttt{sync/atomic} or \texttt{sync.Mutex} \\
+\bottomrule()
+\end{longtable}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Production Checklist}
+
+\begin{itemize}
+\tightlist
+\item[$\square$]
+  All channel directions typed at function boundaries
+  (\texttt{chan\textless{}-}, \texttt{\textless{}-chan})
+\item[$\square$]
+  Buffer sizes documented with the capacity calculation rationale
+\item[$\square$]
+  \texttt{len(ch)} exposed as a Prometheus gauge for backpressure
+  monitoring
+\item[$\square$]
+  \texttt{time.After} replaced with \texttt{time.NewTimer} in loops
+\item[$\square$]
+  WebSocket hub uses single-goroutine ownership model (no map mutex)
+\item[$\square$]
+  Fan-out/fan-in pattern for load generator concurrency
+\item[$\square$]
+  \texttt{orDone} wrapper used for channels that must respect context
+  cancellation
+\item[$\square$]
+  No goroutine starts without a corresponding exit path documented
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Mini Backend Exercise}
+
+\textbf{Task:} Implement a 3-stage pipeline for the ARCHER telemetry
+path: 1. \texttt{Stage\ 1} --- reads \texttt{{[}{]}byte} from a slice
+(simulate Kafka), sends to channel 2. \texttt{Stage\ 2} --- parses JSON
+into \texttt{MetricEvent}, sends to channel 3. \texttt{Stage\ 3} ---
+aggregates events into \texttt{map{[}string{]}int} (count per status
+code) 4. Wire all three with channels, use \texttt{context.WithTimeout}
+to shut down after 500ms 5. Verify with \texttt{-race}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Concurrency Exercise}
+
+\textbf{Task:} Build a \texttt{BroadcastHub} that: 1. Accepts subscriber
+\texttt{Register(ch\ chan\textless{}-\ string)} and
+\texttt{Unregister(ch\ chan\textless{}-\ string)} calls 2. Accepts
+\texttt{Broadcast(msg\ string)} that sends to all subscribers 3. If a
+subscriber's channel is full, drop the message (non-blocking send) 4.
+Runs as a single goroutine (\texttt{Run(ctx\ context.Context)}) --- no
+mutexes on the subscriber map 5. Test with 10 subscribers, 1
+broadcaster, 1000 messages
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Systems-Oriented Exercise}
+
+Design the complete channel topology for the ARCHER load generator: 1.
+Job source → fan-out (N workers) → fan-in → result aggregator 2. Add a
+semaphore channel limiting concurrency to a configured max 3. Add a
+context-driven shutdown that drains in-flight results before exiting 4.
+Identify which goroutines need \texttt{select} with \texttt{ctx.Done()}
+and which can use \texttt{range}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{How This Maps to the ARCHER
+Architecture}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+ARCHER Component
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Channel Pattern
+\end{minipage} \\
+\midrule()
+\endhead
+Load Generator & Fan-out (jobs → workers) + Fan-in (results →
+aggregator) + Semaphore (concurrency limit) \\
+Telemetry Pipeline & Linear pipeline (Kafka bytes → parse → store) \\
+WebSocket Hub & Hub pattern (register/unregister/broadcast channels) \\
+Worker Orchestrator & Done channel for shutdown broadcast; result
+channel for collection \\
+Kafka Consumer & orDone wrapper; per-message processing inline \\
+API → Dashboard & Broadcast channel from metric aggregator to WebSocket
+hub \\
+\bottomrule()
+\end{longtable}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{What Actually Matters for the
+Hackathon}
+
+\begin{itemize}
+\tightlist
+\item
+  The Hub pattern eliminates the hardest concurrency bug in WebSocket
+  servers (concurrent map writes)
+\item
+  Pipeline pattern makes telemetry ingestion testable stage-by-stage
+  without a running Kafka
+\item
+  Semaphore channel is 3 lines and gives you precise concurrency control
+  in the load generator
+\item
+  Buffered channels with \texttt{len(ch)} monitoring give you real-time
+  backpressure visibility
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{What Can Be Ignored for
+Now}
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{reflect.Select} for dynamic channel selection --- only needed
+  for building frameworks
+\item
+  \texttt{golang.org/x/sync/singleflight} --- useful for cache stampede
+  prevention; not needed in MVP
+\item
+  Lock-free ring buffers --- premature optimization; buffered channels
+  are sufficient
+\item
+  LMAX Disruptor patterns --- relevant at 10M+ events/second; not
+  ARCHER's scale
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\emph{Next chapter: Worker Pools and Concurrent Job Systems ---
+composing the goroutine and channel primitives from Chapters 5 and 6
+into production-grade job execution infrastructure.}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{Chapter 07 --- Worker Pools and Concurrent Job
+Systems}
+
+\begin{quote}
+\textbf{Engineering Learning Booklet \textbar{} ARCHER Backend
+Architecture Series} \emph{Composing goroutines, channels, and
+interfaces into production-grade concurrent job execution
+infrastructure.}
+\end{quote}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{Why Worker Pools Exist}
+
+The naive approach to concurrent execution is to spawn a goroutine per
+job. For 10 jobs this works fine. For 100,000 simultaneous HTTP requests
+against a single target, it causes:
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Socket exhaustion} --- the OS has a limit on open file
+  descriptors (typically 65k)
+\item
+  \textbf{Target overload} --- the benchmarked service sees a thundering
+  herd, not realistic load
+\item
+  \textbf{Uncontrolled memory growth} --- 100k goroutines × 2KB each =
+  200MB at minimum, growing with stack depth
+\item
+  \textbf{CPU thrashing} --- scheduler overhead from context switching
+  100k goroutines across \texttt{GOMAXPROCS} threads
+\end{itemize}
+
+A \textbf{worker pool} bounds concurrency to a fixed number of
+goroutines, processes an unbounded job queue through that fixed pool,
+and provides lifecycle management (start, drain, shutdown) for the
+entire system. It is the foundational primitive for every load
+generator, background job processor, and event pipeline in ARCHER.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{The Minimal Worker Pool}
+
+Building up from first principles:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// pkg/loadgen/pool.go
+package loadgen
+
+import (
+    "context"
+    "sync"
+)
+
+// Job is any unit of executable work — defined in Chapter 3.
+type Job interface {
+    Execute(ctx context.Context) Result
+    ID() string
+}
+
+type Result struct {
+    JobID   string
+    Err     error
+    Payload any
+}
+
+// Pool runs a fixed number of worker goroutines draining a job channel.
+type Pool struct {
+    concurrency int
+    jobs        chan Job
+    results     chan Result
+    wg          sync.WaitGroup
+}
+
+func NewPool(concurrency, bufferSize int) *Pool {
+    return &Pool{
+        concurrency: concurrency,
+        jobs:        make(chan Job, bufferSize),
+        results:     make(chan Result, bufferSize),
+    }
+}
+
+// Start launches worker goroutines. Call before submitting jobs.
+func (p *Pool) Start(ctx context.Context) {
+    for i := 0; i < p.concurrency; i++ {
+        p.wg.Add(1)
+        go func() {
+            defer p.wg.Done()
+            for {
+                select {
+                case <-ctx.Done():
+                    return
+                case job, ok := <-p.jobs:
+                    if !ok {
+                        return
+                    }
+                    p.results <- job.Execute(ctx)
+                }
+            }
+        }()
+    }
+}
+
+// Submit sends a job into the pool. Blocks if job buffer is full.
+func (p *Pool) Submit(job Job) {
+    p.jobs <- job
+}
+
+// Close signals no more jobs. Workers drain and exit.
+func (p *Pool) Close() {
+    close(p.jobs)
+}
+
+// Wait blocks until all workers have exited, then closes results.
+func (p *Pool) Wait() {
+    p.wg.Wait()
+    close(p.results)
+}
+
+// Results returns the result channel for consumption.
+func (p *Pool) Results() <-chan Result {
+    return p.results
+}
+\end{minted}
+
+Usage pattern:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+pool := NewPool(50, 1000) // 50 workers, 1000-job buffer
+pool.Start(ctx)
+
+// Submit in a goroutine so we don't block before reading results
+go func() {
+    for _, job := range jobs {
+        pool.Submit(job)
+    }
+    pool.Close() // signal end of jobs
+}()
+
+// Drain results
+go func() {
+    pool.Wait() // blocks until all workers done, then closes results
+}()
+
+for result := range pool.Results() {
+    aggregate(result)
+}
+\end{minted}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{3. Lifecycle Management --- The Full State
+Machine}
+
+A production worker pool has four states: \textbf{Idle → Running →
+Draining → Stopped}.
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{text}
+NewPool()          Start(ctx)         Close()            Wait()
+   │                  │                  │                  │
+[Idle] ──────────► [Running] ────────► [Draining] ──────► [Stopped]
+                      │                  │
+                   Submit(job)       No new jobs accepted
+                   Results() readable  Remaining jobs complete
+\end{minted}
+
+Critical discipline: - \texttt{Start()} before any \texttt{Submit()} -
+\texttt{Close()} after all \texttt{Submit()} calls --- signals ``no more
+jobs'' - \texttt{Wait()} after \texttt{Close()} --- blocks until all
+workers drain - \texttt{Results()} channel readable \textbf{throughout}
+(buffered) and closed only after \texttt{Wait()}
+
+Violating this order causes either deadlock (submit to closed channel
+panics) or missing results (reading results before workers finish).
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{4. The Load Generator Worker
+Pool}
+
+The ARCHER load generator needs more than a basic pool. It needs:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Rate limiting} --- send at most N requests/second
+\item
+  \textbf{Ramp-up} --- gradually increase load from 0 to target
+  concurrency
+\item
+  \textbf{Real-time metrics} --- emit results as they arrive, not after
+  all complete
+\item
+  \textbf{Context cancellation} --- stop immediately on SIGTERM or run
+  expiry
+\end{enumerate}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// internal/loadgen/runner.go
+package loadgen
+
+import (
+    "context"
+    "sync"
+    "time"
+    "golang.org/x/time/rate"
+)
+
+type RunConfig struct {
+    Concurrency int
+    Duration    time.Duration
+    RatePerSec  int           // 0 = unlimited
+    Target      string
+}
+
+type Runner struct {
+    cfg     RunConfig
+    pool    *Pool
+    limiter *rate.Limiter
+    metrics *MetricAccumulator // from Chapter 3
+}
+
+func NewRunner(cfg RunConfig) *Runner {
+    var lim *rate.Limiter
+    if cfg.RatePerSec > 0 {
+        lim = rate.NewLimiter(rate.Limit(cfg.RatePerSec), cfg.RatePerSec)
+    }
+    return &Runner{
+        cfg:     cfg,
+        pool:    NewPool(cfg.Concurrency, cfg.Concurrency*2),
+        limiter: lim,
+        metrics: NewMetricAccumulator(),
+    }
+}
+
+func (r *Runner) Run(ctx context.Context) (*RunReport, error) {
+    // Bound run by duration
+    runCtx, cancel := context.WithTimeout(ctx, r.cfg.Duration)
+    defer cancel()
+
+    r.pool.Start(runCtx)
+
+    // Job feeder goroutine
+    go func() {
+        defer r.pool.Close()
+        for {
+            if runCtx.Err() != nil {
+                return
+            }
+            // Rate limit if configured
+            if r.limiter != nil {
+                if err := r.limiter.Wait(runCtx); err != nil {
+                    return
+                }
+            }
+            r.pool.Submit(&HTTPJob{
+                id:     newJobID(),
+                url:    r.cfg.Target,
+                client: sharedHTTPClient,
+            })
+        }
+    }()
+
+    // Result collector goroutine
+    var wg sync.WaitGroup
+    wg.Add(1)
+    go func() {
+        defer wg.Done()
+        r.pool.Wait()
+    }()
+
+    for result := range r.pool.Results() {
+        r.metrics.Record(result)
+    }
+
+    wg.Wait()
+    return r.metrics.Report(), nil
+}
+\end{minted}
+
+\textbf{Key design decisions:} - \texttt{context.WithTimeout} bounds the
+run --- even if the job feeder loops indefinitely, the pool's
+\texttt{ctx.Done()} exits workers - The job feeder closes the pool's job
+channel when done --- workers drain remaining buffered jobs - Rate
+limiter (\texttt{golang.org/x/time/rate}) applies token bucket algorithm
+--- industry standard for load control - Results are streamed in
+real-time to the accumulator, not batched at the end
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{5. The Metric Accumulator (Revisited from Chapter
+3)}
+
+In the context of a worker pool producing results at high frequency, the
+accumulator must be lock-efficient:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// internal/loadgen/accumulator.go
+type MetricAccumulator struct {
+    mu        sync.Mutex
+    latencies []time.Duration
+    counts    map[int]int64
+    errors    atomic.Int64
+    total     atomic.Int64
+}
+
+func (a *MetricAccumulator) Record(r Result) {
+    a.total.Add(1)
+
+    var res HTTPResult
+    if r.Err != nil {
+        a.errors.Add(1)
+        return
+    }
+    res = r.Payload.(HTTPResult)
+
+    a.mu.Lock()
+    a.latencies = append(a.latencies, res.Latency)
+    a.counts[res.StatusCode]++
+    a.mu.Unlock()
+}
+
+func (a *MetricAccumulator) Report() *RunReport {
+    a.mu.Lock()
+    lats := make([]time.Duration, len(a.latencies))
+    copy(lats, a.latencies)
+    counts := maps.Clone(a.counts)
+    a.mu.Unlock()
+
+    sort.Slice(lats, func(i, j int) bool { return lats[i] < lats[j] })
+
+    return &RunReport{
+        Total:    a.total.Load(),
+        Errors:   a.errors.Load(),
+        P50:      percentile(lats, 0.50),
+        P95:      percentile(lats, 0.95),
+        P99:      percentile(lats, 0.99),
+        Max:      lats[len(lats)-1],
+        Counts:   counts,
+    }
+}
+
+func percentile(sorted []time.Duration, p float64) time.Duration {
+    if len(sorted) == 0 {
+        return 0
+    }
+    idx := int(float64(len(sorted)) * p)
+    if idx >= len(sorted) {
+        idx = len(sorted) - 1
+    }
+    return sorted[idx]
+}
+\end{minted}
+
+The mutex only covers the append and map update --- atomics handle the
+simple counters without lock overhead. The report takes a full copy
+before sorting, keeping the lock duration short.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{6. The Generic Worker Pool (Go
+1.18+)}
+
+With generics, the pool becomes type-safe without the \texttt{any} type
+assertion on results:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// pkg/pool/pool.go — generic, reusable across ARCHER services
+package pool
+
+import (
+    "context"
+    "sync"
+)
+
+type WorkFunc[T, R any] func(ctx context.Context, job T) R
+
+type Pool[T, R any] struct {
+    concurrency int
+    fn          WorkFunc[T, R]
+    jobs        chan T
+    results     chan R
+    wg          sync.WaitGroup
+}
+
+func New[T, R any](concurrency, buffer int, fn WorkFunc[T, R]) *Pool[T, R] {
+    return &Pool[T, R]{
+        concurrency: concurrency,
+        fn:          fn,
+        jobs:        make(chan T, buffer),
+        results:     make(chan R, buffer),
+    }
+}
+
+func (p *Pool[T, R]) Start(ctx context.Context) {
+    for i := 0; i < p.concurrency; i++ {
+        p.wg.Add(1)
+        go func() {
+            defer p.wg.Done()
+            for {
+                select {
+                case <-ctx.Done():
+                    return
+                case job, ok := <-p.jobs:
+                    if !ok {
+                        return
+                    }
+                    p.results <- p.fn(ctx, job)
+                }
+            }
+        }()
+    }
+}
+
+func (p *Pool[T, R]) Submit(job T)       { p.jobs <- job }
+func (p *Pool[T, R]) Close()             { close(p.jobs) }
+func (p *Pool[T, R]) Results() <-chan R  { return p.results }
+func (p *Pool[T, R]) Wait()              { p.wg.Wait(); close(p.results) }
+\end{minted}
+
+Usage --- no type assertions anywhere:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+p := pool.New[HTTPJob, HTTPResult](50, 500, func(ctx context.Context, job HTTPJob) HTTPResult {
+    return job.Execute(ctx)
+})
+p.Start(ctx)
+// ... submit, collect results with full type safety
+\end{minted}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{Priority Job Queues}
+
+Not all jobs are equal. In ARCHER, a ``cancel run'' control command must
+preempt pending HTTP jobs:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+type PriorityPool struct {
+    highPriority chan Job // control commands, run cancellation
+    lowPriority  chan Job // regular HTTP jobs
+    results      chan Result
+    wg           sync.WaitGroup
+}
+
+func (p *PriorityPool) workerLoop(ctx context.Context) {
+    defer p.wg.Done()
+    for {
+        // Check high priority first (non-blocking)
+        select {
+        case job, ok := <-p.highPriority:
+            if !ok {
+                return
+            }
+            p.results <- job.Execute(ctx)
+            continue
+        default:
+        }
+
+        // Then wait for either
+        select {
+        case <-ctx.Done():
+            return
+        case job, ok := <-p.highPriority:
+            if !ok {
+                return
+            }
+            p.results <- job.Execute(ctx)
+        case job, ok := <-p.lowPriority:
+            if !ok {
+                return
+            }
+            p.results <- job.Execute(ctx)
+        }
+    }
+}
+\end{minted}
+
+The double-select pattern: first non-blocking check of the high-priority
+channel, then blocking wait on both. Workers always drain high-priority
+work before processing low-priority jobs.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{8. The Kafka Consumer as a Worker
+Pool}
+
+The Kafka consumer in ARCHER is a worker pool where messages are the
+jobs:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// internal/kafka/consumer_pool.go
+type ConsumerPool struct {
+    reader      *kafka.Reader
+    workerCount int
+    processFn   func(ctx context.Context, msg kafka.Message) error
+    logger      *zap.Logger
+}
+
+func (c *ConsumerPool) Run(ctx context.Context) error {
+    msgCh := make(chan kafka.Message, c.workerCount*2)
+
+    // Single reader goroutine — Kafka reader is not thread-safe
+    go func() {
+        defer close(msgCh)
+        for {
+            msg, err := c.reader.ReadMessage(ctx)
+            if err != nil {
+                if ctx.Err() != nil {
+                    return
+                }
+                c.logger.Error("kafka read", zap.Error(err))
+                continue
+            }
+            select {
+            case msgCh <- msg:
+            case <-ctx.Done():
+                return
+            }
+        }
+    }()
+
+    // Worker pool processes messages concurrently
+    var wg sync.WaitGroup
+    for i := 0; i < c.workerCount; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for msg := range msgCh {
+                if err := c.processFn(ctx, msg); err != nil {
+                    c.logger.Error("process message",
+                        zap.Int64("offset", msg.Offset),
+                        zap.Error(err),
+                    )
+                }
+            }
+        }()
+    }
+
+    wg.Wait()
+    return ctx.Err()
+}
+\end{minted}
+
+\textbf{Critical constraint}: The Kafka reader is read sequentially by a
+single goroutine. Workers receive messages via \texttt{msgCh}. This
+preserves Kafka's ordering guarantees per partition while parallelizing
+message processing.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{9. Backpressure and Flow
+Control}
+
+A pool without backpressure is a pool that lies about its capacity. When
+the consumer is slower than the producer:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// Attempt 1: Drop jobs (lossy — acceptable for non-critical telemetry)
+select {
+case pool.jobs <- job:
+default:
+    metrics.DroppedJobs.Inc()
+}
+
+// Attempt 2: Block the producer (lossless — correct for load generator)
+pool.jobs <- job // blocks until a worker picks it up
+
+// Attempt 3: Apply upstream pressure via rate limiting
+if err := limiter.Wait(ctx); err != nil {
+    return // context cancelled — shut down cleanly
+}
+pool.jobs <- job
+\end{minted}
+
+Choose based on the semantics of your system: - \textbf{Load generator}
+→ block (every job represents a real request that must be sent) -
+\textbf{Telemetry agent under overload} → drop with counter (losing some
+metrics is acceptable) - \textbf{Worker orchestrator} → block with
+timeout (return error if job queue is full for \textgreater N seconds)
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{Pool Observability}
+
+A pool is a black box without instrumentation:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+type ObservablePool struct {
+    *Pool
+    activeWorkers  atomic.Int64
+    queueDepth     func() int  // closure over chan len
+    processedTotal atomic.Int64
+    errorTotal     atomic.Int64
+}
+
+func (p *ObservablePool) workerLoop(ctx context.Context) {
+    for job := range p.jobs {
+        p.activeWorkers.Add(1)
+        result := job.Execute(ctx)
+        p.activeWorkers.Add(-1)
+        p.processedTotal.Add(1)
+        if result.Err != nil {
+            p.errorTotal.Add(1)
+        }
+        p.results <- result
+    }
+}
+
+// Expose to Prometheus in a metrics goroutine
+func (p *ObservablePool) RegisterMetrics(reg prometheus.Registerer) {
+    reg.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+        Name: "archer_pool_active_workers",
+    }, func() float64 { return float64(p.activeWorkers.Load()) }))
+
+    reg.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+        Name: "archer_pool_queue_depth",
+    }, func() float64 { return float64(len(p.jobs)) }))
+}
+\end{minted}
+
+Key metrics for every ARCHER worker pool: - \texttt{active\_workers} ---
+how many workers are currently executing jobs - \texttt{queue\_depth}
+--- how many jobs are pending (backpressure indicator) -
+\texttt{processed\_total} --- total jobs completed (rate = throughput) -
+\texttt{error\_total} --- total failures (rate = error rate)
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Key Takeaways}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Fixed concurrency, unbounded queue} --- the worker pool
+  separates capacity from throughput.
+\item
+  \textbf{Lifecycle is a state machine}: Idle → Running → Draining →
+  Stopped. Never violate the order.
+\item
+  \textbf{Rate limiting via token bucket}
+  (\texttt{golang.org/x/time/rate}) for controlled load generation.
+\item
+  \textbf{Kafka consumer = worker pool} with a single sequential reader
+  and parallel processors.
+\item
+  \textbf{Backpressure is a design choice} --- drop, block, or
+  rate-limit depending on system semantics.
+\item
+  \textbf{Generics make pools type-safe} --- prefer
+  \texttt{pool.New{[}T,\ R{]}} over \texttt{pool.New} with \texttt{any}.
+\item
+  \textbf{Instrument every pool} --- active workers, queue depth,
+  throughput, error rate.
+\end{enumerate}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Common Production
+Pitfalls}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+Pitfall
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Consequence
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Correct Approach
+\end{minipage} \\
+\midrule()
+\endhead
+Goroutine-per-job at scale & Socket/memory/CPU exhaustion & Worker pool
+with fixed concurrency \\
+Closing job channel before all submitters finish & Panic on send to
+closed channel & Use \texttt{sync.WaitGroup} to track all submitters \\
+No rate limiting in load generator & Target overload; unrealistic
+benchmarks & \texttt{rate.Limiter} token bucket \\
+Sharing Kafka reader across goroutines & Data corruption --- reader is
+not thread-safe & Single reader goroutine feeds a channel \\
+No backpressure on result channel & Accumulator goroutine falls behind;
+OOM & Buffer results channel proportionally \\
+Missing pool metrics & Blind to saturation or starvation & Expose active
+workers and queue depth \\
+\bottomrule()
+\end{longtable}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Production Checklist}
+
+\begin{itemize}
+\tightlist
+\item[$\square$]
+  Pool concurrency configurable via \texttt{RunConfig} --- not hardcoded
+\item[$\square$]
+  Job channel buffer sized to \texttt{concurrency\ ×\ 2} minimum
+\item[$\square$]
+  \texttt{rate.Limiter} applied in job feeder goroutine if
+  \texttt{RatePerSec\ \textgreater{}\ 0}
+\item[$\square$]
+  Kafka reader accessed from exactly one goroutine
+\item[$\square$]
+  \texttt{active\_workers} and \texttt{queue\_depth} exposed as
+  Prometheus gauges
+\item[$\square$]
+  Pool lifecycle documented:
+  \texttt{Start\ →\ Submit\ →\ Close\ →\ Wait}
+\item[$\square$]
+  Generic pool used where job/result types are known at compile time
+\item[$\square$]
+  Context cancellation exits all worker goroutines cleanly
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Mini Backend Exercise}
+
+\textbf{Task:} Build \texttt{ObservablePool} with 10 workers processing
+mock \texttt{HTTPJob}s: 1. Jobs sleep 10--100ms (simulate HTTP latency)
+2. 10\% jobs return an error 3. Expose \texttt{active\_workers},
+\texttt{queue\_depth}, \texttt{processed\_total}, \texttt{error\_rate}
+as console output every second 4. Run for 10 seconds then shut down
+gracefully via context cancellation
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Systems-Oriented
+Exercise}
+
+Design the worker pool configuration for an ARCHER load test run: 1.
+Given target: 500 req/s sustained for 60 seconds against an endpoint
+with p99 latency of 200ms --- what concurrency is needed? (Hint:
+Little's Law: N = λ × W) 2. What buffer size for the job channel? 3.
+What buffer size for the result channel? 4. How does ramp-up (0→500
+req/s over 10s) change the answer?
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{How This Maps to the ARCHER
+Architecture}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+Component
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Worker Pool Role
+\end{minipage} \\
+\midrule()
+\endhead
+Load Generator & Core execution engine --- \texttt{HTTPJob} pool with
+rate limiter \\
+Kafka Consumer & Sequential reader + parallel processor pool \\
+Worker Orchestrator & Pool of \texttt{RunWorker} goroutines managing
+load test lifecycles \\
+Telemetry Agent & Pool consuming from a metric channel, batching for
+export \\
+Background Jobs & Retry pool for failed metric exports \\
+\bottomrule()
+\end{longtable}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{What Actually Matters for the
+Hackathon}
+
+\begin{itemize}
+\tightlist
+\item
+  Little's Law: concurrency = rate × latency. Know your numbers before
+  setting pool size.
+\item
+  The job feeder + pool pattern is the correct architecture --- not
+  goroutine-per-request
+\item
+  Rate limiter is 2 lines with \texttt{golang.org/x/time/rate} --- add
+  it from the start
+\item
+  Pool metrics in Grafana are how you prove ARCHER is actually
+  generating the intended load
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{What Can Be Ignored for
+Now}
+
+\begin{itemize}
+\tightlist
+\item
+  Work-stealing schedulers --- the Go runtime already does this across
+  Ps
+\item
+  Lock-free queues --- buffered channels have sufficient performance for
+  ARCHER's scale
+\item
+  Persistent job queues (Redis, SQS) --- relevant when jobs must survive
+  process restarts
+\item
+  Job deduplication --- not needed for stateless HTTP load generation
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\emph{Next chapter: Context Package and Graceful Cancellation --- the
+mechanism that makes all pool shutdown, timeout, and cancellation
+semantics composable across every layer of the stack.}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{Chapter 08 --- Context Package and Graceful
+Cancellation}
+
+\begin{quote}
+\textbf{Engineering Learning Booklet \textbar{} ARCHER Backend
+Architecture Series} \emph{How \texttt{context.Context} unifies timeout,
+cancellation, and request-scoped data propagation across every layer of
+a distributed backend.}
+\end{quote}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{1. The Problem Context
+Solves}
+
+In a distributed system, every operation has a caller. That caller may:
+- Timeout after N milliseconds (client-side deadline) - Be cancelled by
+the user (SIGTERM, HTTP connection drop, run abort) - Be cancelled
+because a dependent upstream failed
+
+Without a standard mechanism to propagate these signals, every library,
+every goroutine, every network call needs its own timeout parameter. In
+C++, this is ad-hoc --- you might pass a \texttt{std::chrono::duration},
+a \texttt{bool*\ cancelled}, or a promise/future. In Java pre-2019, you
+used \texttt{Thread.interrupt()} or framework-specific mechanisms
+(CompletableFuture cancellation, Reactor's \texttt{Disposable}).
+
+Go solved this with \texttt{context.Context} --- a single interface that
+carries cancellation, deadlines, and key-value pairs across API
+boundaries, process boundaries (via trace propagation), and goroutine
+boundaries.
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+type Context interface {
+    Deadline() (deadline time.Time, ok bool)
+    Done() <-chan struct{}
+    Err() error
+    Value(key any) any
+}
+\end{minted}
+
+\texttt{Done()} returns a channel that is closed when the context is
+cancelled. \texttt{Err()} returns the reason: \texttt{context.Canceled}
+or \texttt{context.DeadlineExceeded}. \texttt{Value()} retrieves
+key-value pairs attached to the context.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{The Context Tree}
+
+Contexts form an immutable tree. Each derived context inherits its
+parent's cancellation --- cancelling a parent cancels all descendants.
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{text}
+context.Background()               ← root (never cancelled)
+    │
+    ├── WithCancel(background)     ← main() shutdown context
+    │       │
+    │       ├── WithTimeout(10s)   ← HTTP request context
+    │       │       │
+    │       │       └── WithValue  ← trace ID attached
+    │       │
+    │       └── WithTimeout(60s)   ← load test run context
+    │               │
+    │               └── WithCancel ← per-worker context (cancellable early)
+    │
+    └── WithTimeout(5s)            ← graceful shutdown context
+\end{minted}
+
+When \texttt{main()} cancels its shutdown context: - All load test run
+contexts are cancelled - All per-worker contexts are cancelled - All
+HTTP request contexts are cancelled - All goroutines blocked on
+\texttt{ctx.Done()} exit
+
+This cascade is automatic. You write context propagation once; the
+entire call tree shuts down correctly.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{Creating Contexts}
+
+\subsection{Root Contexts}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// For long-running services — never cancelled automatically
+ctx := context.Background()
+
+// For tests and one-off scripts — signals "this context is a placeholder"
+ctx := context.TODO() // identical to Background() at runtime; semantic hint
+\end{minted}
+
+\texttt{context.Background()} is the root for every production service.
+It appears once, in \texttt{main()}, as the parent of all derived
+contexts.
+
+\subsubsection{\texorpdfstring{3.2
+\texttt{WithCancel}}{3.2 WithCancel}}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+ctx, cancel := context.WithCancel(parent)
+defer cancel() // always defer — prevents goroutine leak if context is never cancelled
+\end{minted}
+
+\texttt{cancel()} is idempotent --- calling it multiple times is safe.
+\textbf{Always \texttt{defer\ cancel()}} --- failure to call cancel
+leaks the goroutine that monitors the parent context for cancellation.
+
+\subsubsection{\texorpdfstring{3.3 \texttt{WithTimeout} and
+\texttt{WithDeadline}}{3.3 WithTimeout and WithDeadline}}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// Timeout: relative duration from now
+ctx, cancel := context.WithTimeout(parent, 30*time.Second)
+defer cancel()
+
+// Deadline: absolute time
+deadline := time.Now().Add(30 * time.Second)
+ctx, cancel := context.WithDeadline(parent, deadline)
+defer cancel()
+\end{minted}
+
+If the parent context has a shorter deadline, \texttt{WithTimeout} does
+not extend it --- the shorter deadline wins. This is critical for
+understanding nested contexts in HTTP handlers.
+
+\subsubsection{\texorpdfstring{3.4
+\texttt{WithValue}}{3.4 WithValue}}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+type contextKey string
+
+const (
+    traceIDKey contextKey = "trace_id"
+    runIDKey   contextKey = "run_id"
+)
+
+// Attach a value
+ctx = context.WithValue(ctx, traceIDKey, "abc-123")
+
+// Retrieve a value
+traceID, ok := ctx.Value(traceIDKey).(string)
+\end{minted}
+
+\textbf{Rules for \texttt{WithValue}:} 1. Use a package-private type for
+keys --- prevents key collision across packages 2. Only use for
+request-scoped data: trace IDs, auth info, request IDs 3. Never use for
+passing function parameters or configuration --- that's what function
+arguments are for 4. Values are read-only --- you cannot modify a
+context value
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\section{Context in HTTP Servers}
+
+The standard library sets a request-scoped context on every incoming
+HTTP request. It is cancelled when: - The client disconnects - The
+response is sent - The server is shutting down
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+func runHandler(store RunStore, pool *Pool) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        // r.Context() is already scoped to this request's lifetime
+        ctx := r.Context()
+
+        runID := r.PathValue("id")
+        run, err := store.Get(ctx, runID) // cancelled if client disconnects
+        if err != nil {
+            writeError(w, r, logger, err)
+            return
+        }
+
+        // Long operation — add a tighter timeout
+        execCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+        defer cancel()
+
+        result, err := pool.Execute(execCtx, run)
+        if err != nil {
+            writeError(w, r, logger, err)
+            return
+        }
+        json.NewEncoder(w).Encode(result)
+    }
+}
+\end{minted}
+
+If a client disconnects mid-request, \texttt{r.Context()} is cancelled,
+\texttt{store.Get} returns \texttt{context.Canceled}, and the handler
+exits without completing unnecessary work. This prevents wasted CPU on
+abandoned requests.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{5. Context in the Load
+Generator}
+
+The ARCHER load generator has a multi-level context hierarchy:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// internal/loadgen/runner.go
+func (r *Runner) Run(parentCtx context.Context) (*RunReport, error) {
+    // Level 1: bound the entire run by duration
+    runCtx, runCancel := context.WithTimeout(parentCtx, r.cfg.Duration)
+    defer runCancel()
+
+    // Attach run ID for structured logging throughout
+    runCtx = context.WithValue(runCtx, runIDKey, r.cfg.RunID)
+
+    // Level 2: per-worker contexts — can be cancelled individually for ramp-down
+    workerCtxs := make([]context.CancelFunc, r.cfg.Concurrency)
+    for i := 0; i < r.cfg.Concurrency; i++ {
+        wCtx, wCancel := context.WithCancel(runCtx)
+        workerCtxs[i] = wCancel
+        r.pool.StartWorker(wCtx)
+    }
+
+    // Run until duration expires or parent cancelled
+    <-runCtx.Done()
+
+    // Ramp-down: cancel workers in reverse order over 5s
+    for i := len(workerCtxs) - 1; i >= 0; i-- {
+        workerCtxs[i]()
+        time.Sleep(5 * time.Second / time.Duration(r.cfg.Concurrency))
+    }
+
+    return r.metrics.Report(), nil
+}
+\end{minted}
+
+Each level of context adds a constraint. The run cannot outlive
+\texttt{parentCtx} (shutdown signal). Workers cannot outlive
+\texttt{runCtx} (run duration). Individual workers can be cancelled
+early for ramp-down.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{6. Graceful Shutdown with
+Context}
+
+The canonical shutdown pattern for every ARCHER service:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// cmd/api/main.go
+func main() {
+    // Root context — cancelled on SIGTERM or SIGINT
+    ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+    defer stop()
+
+    server := buildServer(ctx)
+
+    // Start server in a goroutine
+    srvErr := make(chan error, 1)
+    go func() {
+        srvErr <- server.ListenAndServe()
+    }()
+
+    // Wait for shutdown signal or server error
+    select {
+    case err := <-srvErr:
+        if err != http.ErrServerClosed {
+            log.Fatal("server error", zap.Error(err))
+        }
+    case <-ctx.Done():
+        stop() // release signal handler resources
+    }
+
+    // Graceful shutdown: give in-flight requests 10 seconds
+    shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+
+    if err := server.Shutdown(shutdownCtx); err != nil {
+        log.Error("shutdown error", zap.Error(err))
+    }
+}
+\end{minted}
+
+\textbf{Why \texttt{context.Background()} for the shutdown context?} The
+\texttt{ctx} from \texttt{signal.NotifyContext} is already cancelled at
+this point. Using it as the parent of the shutdown context would make
+the shutdown context immediately cancelled too. The shutdown needs a
+fresh, time-bounded context.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{7. Context Propagation in the
+Pipeline}
+
+Every function that does I/O must accept \texttt{context.Context} as its
+first parameter. This is a Go convention enforced by code reviewers and
+linters:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// All I/O functions in ARCHER accept ctx as first param
+func (s *PostgresStore) Save(ctx context.Context, m Metric) error
+func (r *KafkaReader) ReadMessage(ctx context.Context) (kafka.Message, error)
+func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response, error)
+func (p *Pipeline) Run(ctx context.Context) error
+func (w *Worker) Execute(ctx context.Context, job Job) Result
+\end{minted}
+
+Context propagation creates a cancellation chain from \texttt{main()}
+down to every \texttt{sql.QueryContext},
+\texttt{http.NewRequestWithContext}, and channel select. When
+\texttt{main()} receives SIGTERM, the cancellation propagates to every
+in-flight operation automatically.
+
+\subsubsection{7.1 Attaching Context to HTTP
+Requests}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+func (w *HTTPWorker) sendRequest(ctx context.Context, url string) HTTPResult {
+    req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+    if err != nil {
+        return HTTPResult{Err: err}
+    }
+
+    // Attach trace ID from context to outgoing request
+    if traceID, ok := ctx.Value(traceIDKey).(string); ok {
+        req.Header.Set("X-Trace-ID", traceID)
+    }
+
+    resp, err := w.client.Do(req)
+    if err != nil {
+        return HTTPResult{Err: fmt.Errorf("http do: %w", err)}
+    }
+    defer resp.Body.Close()
+    io.Copy(io.Discard, resp.Body)
+    return HTTPResult{StatusCode: resp.StatusCode}
+}
+\end{minted}
+
+\texttt{http.NewRequestWithContext} ties the request lifecycle to
+\texttt{ctx}. If the context is cancelled (run expires, SIGTERM), the
+HTTP client aborts the in-flight connection. No goroutines are left
+blocked on network I/O.
+
+\subsubsection{7.2 Attaching Context to Database
+Queries}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+func (s *PostgresStore) GetByRunID(ctx context.Context, runID string) ([]Metric, error) {
+    rows, err := s.db.QueryContext(ctx,
+        "SELECT * FROM metrics WHERE run_id = $1 ORDER BY timestamp",
+        runID,
+    )
+    if err != nil {
+        return nil, fmt.Errorf("query metrics for run %s: %w", runID, err)
+    }
+    defer rows.Close()
+    // ...
+}
+\end{minted}
+
+\texttt{QueryContext} cancels the database query if \texttt{ctx} is
+cancelled. Without this, a slow query would hold a database connection
+even after the HTTP client that triggered it disconnected.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{\texorpdfstring{8. \texttt{context.WithCancelCause} (Go
+1.21+)}{8. context.WithCancelCause (Go 1.21+)}}
+
+When a run is aborted for a specific reason, you want to communicate
+that reason downstream:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+ctx, cancel := context.WithCancelCause(parentCtx)
+
+// Cancel with a specific reason
+cancel(fmt.Errorf("run aborted by user request"))
+
+// Downstream code can inspect the cause
+if ctx.Err() != nil {
+    cause := context.Cause(ctx)
+    // cause = "run aborted by user request"
+    log.Info("run stopped", zap.Error(cause))
+}
+\end{minted}
+
+Without \texttt{WithCancelCause}, all cancellations look like
+\texttt{context.Canceled} --- you lose the reason. With it, the ARCHER
+run manager can distinguish: user abort, duration expired, error
+threshold exceeded, or SIGTERM.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{9. Common Context
+Anti-Patterns}
+
+\subsubsection{9.1 Storing Context in a
+Struct}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// WRONG — context lifetime is unclear; stale context risks
+type Worker struct {
+    ctx context.Context // never do this
+}
+
+// CORRECT — pass context at call time
+func (w *Worker) Execute(ctx context.Context, job Job) Result
+\end{minted}
+
+A context in a struct field means you don't know when it was created or
+whether it's already cancelled when the method is called. The Go team's
+rule: \textbf{context is a per-call parameter, not a per-object field}.
+
+\subsubsection{\texorpdfstring{9.2 Passing \texttt{nil} as
+Context}{9.2 Passing nil as Context}}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// WRONG — panics when any function calls ctx.Done() or ctx.Err()
+store.Save(nil, metric)
+
+// CORRECT — use context.Background() for non-request-scoped calls
+store.Save(context.Background(), metric)
+// or context.TODO() to explicitly mark as "needs proper context later"
+store.Save(context.TODO(), metric)
+\end{minted}
+
+\subsubsection{9.3 Using Context for Dependency
+Injection}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// WRONG — context is not a service locator
+ctx = context.WithValue(ctx, "db", dbConn)
+db := ctx.Value("db").(*sql.DB)
+
+// CORRECT — inject dependencies explicitly via constructor
+func NewHandler(db *sql.DB, store MetricStore) http.HandlerFunc
+\end{minted}
+
+Context values are for request-scoped cross-cutting concerns (trace IDs,
+auth tokens, request IDs). Never for injecting functional dependencies.
+
+\subsubsection{9.4 Ignoring Context Cancellation in
+Loops}
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+// WRONG — ignores ctx; loop runs until all jobs done even after cancellation
+for _, job := range jobs {
+    result := job.Execute(ctx) // ctx passed but not checked between iterations
+    results = append(results, result)
+}
+
+// CORRECT — check ctx between iterations
+for _, job := range jobs {
+    if ctx.Err() != nil {
+        return results, ctx.Err()
+    }
+    result := job.Execute(ctx)
+    results = append(results, result)
+}
+\end{minted}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{10. Context in the WebSocket
+Hub}
+
+WebSocket connections are long-lived. Context governs their lifecycle:
+
+\begin{minted}[frame=lines, framesep=2mm, baselinestretch=1.1, bgcolor=black!5, fontsize=\small, breaklines]{go}
+func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
+    conn, err := upgrader.Upgrade(w, r, nil)
+    if err != nil {
+        return
+    }
+
+    // Client context — cancelled when connection closes or server shuts down
+    clientCtx, cancel := context.WithCancel(r.Context())
+    client := &Client{
+        conn:   conn,
+        send:   make(chan []byte, 256),
+        cancel: cancel,
+    }
+
+    h.register <- client
+
+    // Read pump — detects client disconnect, cancels clientCtx
+    go func() {
+        defer func() {
+            cancel()
+            h.unregister <- client
+        }()
+        for {
+            _, _, err := conn.ReadMessage()
+            if err != nil {
+                return // connection closed
+            }
+        }
+    }()
+
+    // Write pump — exits when clientCtx cancelled or send channel closed
+    go func() {
+        defer conn.Close()
+        for {
+            select {
+            case <-clientCtx.Done():
+                conn.WriteMessage(websocket.CloseMessage,
+                    websocket.FormatCloseMessage(websocket.CloseGoingAway, ""))
+                return
+            case msg, ok := <-client.send:
+                if !ok {
+                    return
+                }
+                conn.WriteMessage(websocket.TextMessage, msg)
+            }
+        }
+    }()
+}
+\end{minted}
+
+When the server shuts down (parent context cancelled),
+\texttt{r.Context()} is cancelled, \texttt{clientCtx} is cancelled, the
+write pump sends a WebSocket close frame, and the connection closes
+cleanly.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Key Takeaways}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Context is a cancellation tree} --- parent cancellation
+  cascades to all descendants.
+\item
+  \textbf{Always \texttt{defer\ cancel()}} --- forgetting leaks the
+  goroutine watching the parent.
+\item
+  \textbf{\texttt{context.Background()} for shutdown contexts} --- the
+  main ctx is already cancelled at shutdown time.
+\item
+  \textbf{\texttt{ctx} as first parameter on every I/O function} --- Go
+  convention, enforced by linters.
+\item
+  \textbf{\texttt{WithValue} only for cross-cutting concerns} --- trace
+  ID, auth token, request ID.
+\item
+  \textbf{Never store context in a struct} --- it's a per-call
+  parameter.
+\item
+  \textbf{\texttt{signal.NotifyContext}} is the canonical main-loop
+  shutdown pattern.
+\end{enumerate}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Common Production
+Pitfalls}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+Pitfall
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Consequence
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Correct Approach
+\end{minipage} \\
+\midrule()
+\endhead
+Forgetting \texttt{defer\ cancel()} & Parent-watch goroutine leak &
+Always defer immediately after
+\texttt{WithCancel}/\texttt{WithTimeout} \\
+Using cancelled ctx for shutdown & Shutdown context immediately expired
+& Use fresh \texttt{context.Background()} + new timeout for shutdown \\
+\texttt{ctx} in struct field & Stale context; unclear lifetime & Pass
+ctx at call time, every time \\
+\texttt{WithValue} for function params & Hidden dependencies; untestable
+& Use explicit function parameters \\
+No context on DB/HTTP calls & Queries/requests outlive their requesters
+& Use \texttt{QueryContext}, \texttt{NewRequestWithContext} \\
+Not checking \texttt{ctx.Err()} between loop iterations & Loop runs to
+completion after cancellation & Check \texttt{ctx.Err()} at top of each
+iteration \\
+\bottomrule()
+\end{longtable}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Production Checklist}
+
+\begin{itemize}
+\tightlist
+\item[$\square$]
+  \texttt{signal.NotifyContext} used in every binary's \texttt{main()}
+\item[$\square$]
+  Shutdown uses
+  \texttt{context.WithTimeout(context.Background(),\ shutdownDuration)}
+\item[$\square$]
+  All I/O functions accept \texttt{ctx\ context.Context} as first
+  parameter
+\item[$\square$]
+  All \texttt{WithCancel}/\texttt{WithTimeout} calls have
+  \texttt{defer\ cancel()}
+\item[$\square$]
+  Context keys are package-private types (not strings)
+\item[$\square$]
+  \texttt{http.NewRequestWithContext} used --- never
+  \texttt{http.NewRequest}
+\item[$\square$]
+  \texttt{db.QueryContext} / \texttt{db.ExecContext} used --- never bare
+  \texttt{db.Query}
+\item[$\square$]
+  No context stored in struct fields
+\item[$\square$]
+  \texttt{context.WithCancelCause} used where cancellation reason
+  matters
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Mini Backend Exercise}
+
+\textbf{Task:} Build a context-aware batch processor: 1.
+\texttt{ProcessBatch(ctx\ context.Context,\ items\ {[}{]}Item)\ ({[}{]}Result,\ error)}
+2. Each item takes 10--50ms to process 3. If \texttt{ctx} is cancelled
+mid-batch, return partial results processed so far with
+\texttt{ctx.Err()} 4. Add a 5-second timeout for the full batch --- if
+not complete, return partial + timeout error 5. Verify: run with 100
+items and 200ms timeout --- confirm partial results returned
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{Systems-Oriented
+Exercise}
+
+Trace the context tree for a complete ARCHER load test run: 1.
+\texttt{main()} → \texttt{signal.NotifyContext} (shutdown) 2. Run
+manager → \texttt{WithTimeout(runDuration)} 3. Worker pool →
+\texttt{WithCancel} per worker 4. Each HTTP job →
+\texttt{WithTimeout(perRequestTimeout)} 5. Database save → inherits job
+context Draw the tree. Identify which cancellation causes which
+dependent context to cancel.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{How This Maps to the ARCHER
+Architecture}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule()
+\begin{minipage}[b]{\linewidth}\raggedright
+Component
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Context Usage
+\end{minipage} \\
+\midrule()
+\endhead
+\texttt{main()} & \texttt{signal.NotifyContext} --- SIGTERM triggers
+full cascade \\
+Load Generator & \texttt{WithTimeout(runDuration)} → \texttt{WithCancel}
+per worker → \texttt{WithTimeout} per request \\
+HTTP Server & \texttt{r.Context()} per request;
+\texttt{server.Shutdown(ctx)} for graceful drain \\
+Kafka Consumer & \texttt{ReadMessage(ctx)} --- exits cleanly on
+cancellation \\
+Store Layer & \texttt{QueryContext} / \texttt{ExecContext} --- queries
+cancelled on client disconnect \\
+WebSocket Hub & \texttt{WithCancel} per client --- closed on disconnect
+or server shutdown \\
+Telemetry Pipeline & \texttt{pipeline.Run(ctx)} --- final flush
+triggered by \texttt{ctx.Done()} \\
+\bottomrule()
+\end{longtable}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{What Actually Matters for the
+Hackathon}
+
+\begin{itemize}
+\tightlist
+\item
+  One wrong \texttt{defer\ cancel()} omission causes a goroutine leak
+  that shows up as a rising \texttt{runtime.NumGoroutine()} ---
+  instrument this from Day 1
+\item
+  Using \texttt{http.NewRequest} instead of
+  \texttt{http.NewRequestWithContext} means your load generator's HTTP
+  calls survive context cancellation --- fix this first
+\item
+  The \texttt{signal.NotifyContext} + \texttt{server.Shutdown} pattern
+  is the only correct way to shut down an HTTP server under Kubernetes
+  --- copy it verbatim
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{What Can Be Ignored for
+Now}
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{context.AfterFunc} (Go 1.21) --- registers a callback on
+  cancellation; useful for cleanup, not needed for ARCHER MVP
+\item
+  OTel context propagation (W3C TraceContext header) --- add after basic
+  observability is in place
+\item
+  \texttt{context.WithoutCancel} (Go 1.21) --- for detaching from parent
+  cancellation; advanced use case
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\emph{Next chapter: Building REST APIs in Go --- applying context,
+interfaces, middleware, and error handling to construct production-grade
+HTTP API servers.}
+
+
+\end{document}
